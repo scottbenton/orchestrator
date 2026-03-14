@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -120,4 +121,5 @@
 body {
 	background-color: var(--background);
 	color: var(--foreground);
+	font-family: "Inter Variable", sans-serif;
 }
