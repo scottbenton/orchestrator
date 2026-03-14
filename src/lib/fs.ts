@@ -1,10 +1,3 @@
-import {
-  readTextFile,
-  writeTextFile,
-  exists,
-  mkdir,
-  readDir,
-  remove,
-} from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readDir, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 
-export { readTextFile, writeTextFile, exists, mkdir, readDir, remove };
+export { exists, mkdir, readDir, readTextFile, remove, writeTextFile };
