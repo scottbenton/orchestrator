@@ -9,7 +9,17 @@
     "shell:allow-kill",
     "shell:allow-stdin-write",
     "fs:default",
+    {
+      "identifier": "fs:write-all",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "$HOME/**" }]
+    },
     "sql:default",
-    "store:default"
+    "store:default",
+    "dialog:allow-open",
+    "opener:default"
   ]
 }

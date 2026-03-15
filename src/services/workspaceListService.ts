@@ -1,12 +1,12 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
 import { mkdir } from "@/lib/fs";
+import { writeWorkspaceSettings } from "@/services/configService";
 import {
 	DEFAULT_WORKSPACE_SETTINGS,
-	WorkspaceListEntrySchema,
 	type WorkspaceListEntry,
+	WorkspaceListEntrySchema,
 } from "@/types/config";
-import { writeWorkspaceSettings } from "@/services/configService";
 
 // ---------------------------------------------------------------------------
 // Store singleton
@@ -49,7 +49,7 @@ async function readWorkspaceList(): Promise<WorkspaceListEntry[]> {
  */
 export async function createWorkspace(
 	path: string,
-	options?: { name?: string },
+	options?: { name?: string }
 ): Promise<WorkspaceListEntry> {
 	// Write settings.toml (also creates the root directory)
 	await writeWorkspaceSettings(path, {

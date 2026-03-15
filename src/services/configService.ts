@@ -2,11 +2,11 @@ import { parse, stringify } from "smol-toml";
 import { exists, mkdir, readTextFile, writeTextFile } from "@/lib/fs";
 import {
 	DEFAULT_WORKSPACE_SETTINGS,
-	RepoSettingsSchema,
-	WorkspaceSettingsSchema,
 	type RepoSettings,
+	RepoSettingsSchema,
 	type ResolvedConfig,
 	type WorkspaceSettings,
+	WorkspaceSettingsSchema,
 } from "@/types/config";
 
 // ---------------------------------------------------------------------------
@@ -21,11 +21,7 @@ function repoSettingsDir(workspacePath: string, owner: string): string {
 	return `${workspacePath}/_repositories/_settings/${owner}`;
 }
 
-function repoSettingsPath(
-	workspacePath: string,
-	owner: string,
-	repo: string,
-): string {
+function repoSettingsPath(workspacePath: string, owner: string, repo: string): string {
 	return `${repoSettingsDir(workspacePath, owner)}/${repo}.toml`;
 }
 
@@ -38,9 +34,7 @@ function repoSettingsPath(
  * Returns DEFAULT_WORKSPACE_SETTINGS if the file does not exist.
  * Throws ConfigError if the file exists but cannot be parsed or fails validation.
  */
-export async function readWorkspaceSettings(
-	workspacePath: string,
-): Promise<WorkspaceSettings> {
+export async function readWorkspaceSettings(workspacePath: string): Promise<WorkspaceSettings> {
 	const path = workspaceSettingsPath(workspacePath);
 
 	const fileExists = await exists(path);
@@ -53,18 +47,14 @@ export async function readWorkspaceSettings(
 	try {
 		parsed = parse(raw);
 	} catch (cause) {
-		throw new ConfigError(
-			`Failed to parse settings.toml in ${workspacePath}`,
-			{ cause },
-		);
+		throw new ConfigError(`Failed to parse settings.toml in ${workspacePath}`, { cause });
 	}
 
 	const result = WorkspaceSettingsSchema.safeParse(parsed);
 	if (!result.success) {
-		throw new ConfigError(
-			`Invalid settings.toml in ${workspacePath}: ${result.error.message}`,
-			{ cause: result.error },
-		);
+		throw new ConfigError(`Invalid settings.toml in ${workspacePath}: ${result.error.message}`, {
+			cause: result.error,
+		});
 	}
 	return result.data;
 }
@@ -76,17 +66,16 @@ export async function readWorkspaceSettings(
  */
 export async function writeWorkspaceSettings(
 	workspacePath: string,
-	settings: Partial<WorkspaceSettings>,
+	settings: Partial<WorkspaceSettings>
 ): Promise<void> {
 	const current = await readWorkspaceSettings(workspacePath);
 	const merged = { ...current, ...settings };
 
 	const result = WorkspaceSettingsSchema.safeParse(merged);
 	if (!result.success) {
-		throw new ConfigError(
-			`Cannot write invalid WorkspaceSettings: ${result.error.message}`,
-			{ cause: result.error },
-		);
+		throw new ConfigError(`Cannot write invalid WorkspaceSettings: ${result.error.message}`, {
+			cause: result.error,
+		});
 	}
 
 	await ensureDir(workspacePath);
@@ -106,7 +95,7 @@ export async function writeWorkspaceSettings(
 export async function readRepoSettings(
 	workspacePath: string,
 	owner: string,
-	repo: string,
+	repo: string
 ): Promise<RepoSettings | null> {
 	const path = repoSettingsPath(workspacePath, owner, repo);
 
@@ -120,18 +109,14 @@ export async function readRepoSettings(
 	try {
 		parsed = parse(raw);
 	} catch (cause) {
-		throw new ConfigError(
-			`Failed to parse repo settings for ${owner}/${repo}`,
-			{ cause },
-		);
+		throw new ConfigError(`Failed to parse repo settings for ${owner}/${repo}`, { cause });
 	}
 
 	const result = RepoSettingsSchema.safeParse(parsed);
 	if (!result.success) {
-		throw new ConfigError(
-			`Invalid repo settings for ${owner}/${repo}: ${result.error.message}`,
-			{ cause: result.error },
-		);
+		throw new ConfigError(`Invalid repo settings for ${owner}/${repo}: ${result.error.message}`, {
+			cause: result.error,
+		});
 	}
 	return result.data;
 }
@@ -148,17 +133,16 @@ export async function writeRepoSettings(
 	workspacePath: string,
 	owner: string,
 	repo: string,
-	settings: Partial<RepoSettings>,
+	settings: Partial<RepoSettings>
 ): Promise<void> {
 	const current = (await readRepoSettings(workspacePath, owner, repo)) ?? {};
 	const merged = { ...current, ...settings };
 
 	const result = RepoSettingsSchema.safeParse(merged);
 	if (!result.success) {
-		throw new ConfigError(
-			`Cannot write invalid RepoSettings: ${result.error.message}`,
-			{ cause: result.error },
-		);
+		throw new ConfigError(`Cannot write invalid RepoSettings: ${result.error.message}`, {
+			cause: result.error,
+		});
 	}
 
 	await ensureDir(repoSettingsDir(workspacePath, owner));
@@ -180,7 +164,7 @@ export async function writeRepoSettings(
 export async function getResolvedConfig(
 	workspacePath: string,
 	owner?: string,
-	repo?: string,
+	repo?: string
 ): Promise<ResolvedConfig> {
 	const workspace = await readWorkspaceSettings(workspacePath);
 

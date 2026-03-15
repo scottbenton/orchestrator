@@ -13,7 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -23,4 +23,5 @@ dist-ssr
 *.sw?
 
 # AI
-.claude/*.local.json
+.claude/
+.agents/
