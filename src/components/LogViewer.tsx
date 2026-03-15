@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getTaskLogs } from "@/services/logStreamService";
 import { useLogsStore } from "@/store/logsStore";
@@ -11,16 +11,31 @@ interface LogViewerProps {
 }
 
 export function LogViewer({ taskId, live = false }: LogViewerProps) {
-	const lines = useLogsStore((s) => s.logs[taskId] ?? []);
-	const setLogs = useLogsStore((s) => s.setLogs);
+	// Historical lines loaded once from SQLite — kept in local state so they
+	// never interfere with the live stream in the Zustand store.
+	const [historicalLines, setHistoricalLines] = useState<LogLine[]>([]);
+	// Live lines pushed by runProcess via appendLine — only lines from the
+	// current (or most recent) process session.
+	const liveLines = useLogsStore((s) => s.logs[taskId] ?? []);
+
+	// Merge: show historical lines that haven't been superseded by live lines,
+	// followed by the live buffer. Dedup by ID handles the overlap window when
+	// the DB query completes while lines are already streaming.
+	const lines = useMemo(() => {
+		const liveIds = new Set(liveLines.map((l) => l.id));
+		return [
+			...historicalLines.filter((l) => !liveIds.has(l.id)),
+			...liveLines,
+		];
+	}, [historicalLines, liveLines]);
 
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [autoScroll, setAutoScroll] = useState(true);
 
 	useEffect(() => {
-		getTaskLogs(taskId).then((loaded) => setLogs(taskId, loaded));
-	}, [taskId, setLogs]);
+		getTaskLogs(taskId).then(setHistoricalLines);
+	}, [taskId]);
 
 	useEffect(() => {
 		if (autoScroll) {
