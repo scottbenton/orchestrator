@@ -1,9 +1,12 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
+import { mkdir } from "@/lib/fs";
 import {
+	DEFAULT_WORKSPACE_SETTINGS,
 	WorkspaceListEntrySchema,
 	type WorkspaceListEntry,
 } from "@/types/config";
+import { writeWorkspaceSettings } from "@/services/configService";
 
 // ---------------------------------------------------------------------------
 // Store singleton
@@ -34,6 +37,43 @@ async function readWorkspaceList(): Promise<WorkspaceListEntry[]> {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * Creates a new workspace at the given path:
+ *   1. Writes settings.toml with defaults (name overrideable via options)
+ *   2. Creates the standard directory structure
+ *   3. Registers it in the workspace list
+ *
+ * Returns the new WorkspaceListEntry. Safe to call on an existing path —
+ * directories are created only if they don't already exist.
+ */
+export async function createWorkspace(
+	path: string,
+	options?: { name?: string },
+): Promise<WorkspaceListEntry> {
+	// Write settings.toml (also creates the root directory)
+	await writeWorkspaceSettings(path, {
+		...DEFAULT_WORKSPACE_SETTINGS,
+		...(options?.name ? { name: options.name } : {}),
+	});
+
+	// Create the standard directory structure
+	const dirs = [
+		`${path}/_memory/corrections`,
+		`${path}/_memory/repos`,
+		`${path}/_memory/skills`,
+		`${path}/_repositories/_settings`,
+		`${path}/_worktrees`,
+	];
+	await Promise.all(dirs.map((dir) => mkdir(dir, { recursive: true })));
+
+	const entry: WorkspaceListEntry = {
+		path,
+		name: options?.name ?? DEFAULT_WORKSPACE_SETTINGS.name,
+	};
+	await addWorkspace(entry);
+	return entry;
+}
 
 /**
  * Returns all registered workspaces in insertion order.
