@@ -5,6 +5,7 @@ import {
 	RepoSettingsSchema,
 	WorkspaceSettingsSchema,
 	type RepoSettings,
+	type ResolvedConfig,
 	type WorkspaceSettings,
 } from "@/types/config";
 
@@ -69,15 +70,18 @@ export async function readWorkspaceSettings(
 }
 
 /**
- * Writes validated settings to {workspacePath}/settings.toml.
- * Creates the workspace directory if it does not exist.
- * Throws ConfigError if settings fail validation or the write fails.
+ * Merges the given partial settings into the existing settings.toml (or defaults)
+ * and writes the result. Creates the workspace directory if it does not exist.
+ * Throws ConfigError if the merged result fails validation.
  */
 export async function writeWorkspaceSettings(
 	workspacePath: string,
-	settings: WorkspaceSettings,
+	settings: Partial<WorkspaceSettings>,
 ): Promise<void> {
-	const result = WorkspaceSettingsSchema.safeParse(settings);
+	const current = await readWorkspaceSettings(workspacePath);
+	const merged = { ...current, ...settings };
+
+	const result = WorkspaceSettingsSchema.safeParse(merged);
 	if (!result.success) {
 		throw new ConfigError(
 			`Cannot write invalid WorkspaceSettings: ${result.error.message}`,
@@ -133,17 +137,23 @@ export async function readRepoSettings(
 }
 
 /**
- * Writes validated settings to {workspacePath}/_repositories/_settings/{owner}/{repo}.toml.
- * Creates intermediate directories ({owner}/) if they do not exist.
- * Throws ConfigError if settings fail validation or the write fails.
+ * Merges the given partial settings into the existing repo TOML (or an empty
+ * object if the file doesn't exist yet) and writes the result. Creates
+ * intermediate directories if they do not exist.
+ *
+ * On first write, `settings.repo` must be provided (it is required by the schema).
+ * Throws ConfigError if the merged result fails validation.
  */
 export async function writeRepoSettings(
 	workspacePath: string,
 	owner: string,
 	repo: string,
-	settings: RepoSettings,
+	settings: Partial<RepoSettings>,
 ): Promise<void> {
-	const result = RepoSettingsSchema.safeParse(settings);
+	const current = (await readRepoSettings(workspacePath, owner, repo)) ?? {};
+	const merged = { ...current, ...settings };
+
+	const result = RepoSettingsSchema.safeParse(merged);
 	if (!result.success) {
 		throw new ConfigError(
 			`Cannot write invalid RepoSettings: ${result.error.message}`,
@@ -154,6 +164,45 @@ export async function writeRepoSettings(
 	await ensureDir(repoSettingsDir(workspacePath, owner));
 	const toml = stringify(result.data as Record<string, unknown>);
 	await writeTextFile(repoSettingsPath(workspacePath, owner, repo), toml);
+}
+
+// ---------------------------------------------------------------------------
+// Resolved config
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the effective config for a given context by merging:
+ *   defaults → workspace settings → repo overrides (if owner/repo provided)
+ *
+ * This is the primary way to read config — callers should not need to
+ * manually merge levels.
+ */
+export async function getResolvedConfig(
+	workspacePath: string,
+	owner?: string,
+	repo?: string,
+): Promise<ResolvedConfig> {
+	const workspace = await readWorkspaceSettings(workspacePath);
+
+	const resolved: ResolvedConfig = {
+		name: workspace.name,
+		ai_backend: workspace.ai_backend,
+		editor: workspace.editor,
+	};
+
+	if (owner && repo) {
+		const repoSettings = await readRepoSettings(workspacePath, owner, repo);
+		if (repoSettings) {
+			if (repoSettings.ai_backend !== undefined) {
+				resolved.ai_backend = repoSettings.ai_backend;
+			}
+			if (repoSettings.editor !== undefined) {
+				resolved.editor = repoSettings.editor;
+			}
+		}
+	}
+
+	return resolved;
 }
 
 // ---------------------------------------------------------------------------
