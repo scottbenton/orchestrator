@@ -7,6 +7,10 @@ import { router } from "./router";
 // Side-effect: reads localStorage and applies dark class on import
 import "./store/uiStore";
 import "./index.css";
+import { getDb } from "./lib/db";
+
+// Run DB migration on startup
+getDb().catch(console.error);
 
 const queryClient = new QueryClient();
 
