@@ -23,31 +23,27 @@ export function LogViewer({ taskId, live = false }: LogViewerProps) {
 	// the DB query completes while lines are already streaming.
 	const lines = useMemo(() => {
 		const liveIds = new Set(liveLines.map((l) => l.id));
-		return [
-			...historicalLines.filter((l) => !liveIds.has(l.id)),
-			...liveLines,
-		];
+		return [...historicalLines.filter((l) => !liveIds.has(l.id)), ...liveLines];
 	}, [historicalLines, liveLines]);
 
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const [autoScroll, setAutoScroll] = useState(true);
+	const autoScrollRef = useRef(true);
 
 	useEffect(() => {
 		getTaskLogs(taskId).then(setHistoricalLines);
 	}, [taskId]);
 
 	useEffect(() => {
-		if (autoScroll) {
+		if (autoScrollRef.current) {
 			bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 		}
-	}, [lines, autoScroll]);
+	}, [lines]);
 
 	const handleScroll = () => {
 		const el = containerRef.current;
 		if (!el) return;
-		const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
-		setAutoScroll(atBottom);
+		autoScrollRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
 	};
 
 	const handleCopyAll = () => {
@@ -63,12 +59,7 @@ export function LogViewer({ taskId, live = false }: LogViewerProps) {
 						Live
 					</span>
 				)}
-				<Button
-					variant="ghost"
-					size="sm"
-					className="ml-auto h-6 text-xs"
-					onClick={handleCopyAll}
-				>
+				<Button variant="ghost" size="sm" className="ml-auto h-6 text-xs" onClick={handleCopyAll}>
 					Copy all
 				</Button>
 			</div>
