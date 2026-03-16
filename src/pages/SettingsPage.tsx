@@ -7,34 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { activeWorkspaceQueryKey, useActiveWorkspace } from "@/hooks/api/useActiveWorkspace";
-import { workspacesQueryKey, useWorkspaces } from "@/hooks/api/useWorkspaces";
+import { workspacesQueryKey } from "@/hooks/api/useWorkspaces";
+import { workspaceRoute } from "@/router";
 import { addWorkspace, removeWorkspace } from "@/services/workspaceListService";
 
 export function SettingsPage() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { data: activePath } = useActiveWorkspace();
-	const { data: workspaces = [] } = useWorkspaces();
+	const { workspace } = workspaceRoute.useRouteContext();
 
-	const workspace = workspaces.find((w) => w.path === activePath);
-	const currentName = workspace?.name ?? "";
-
-	const [name, setName] = useState(currentName);
+	const [name, setName] = useState(workspace.name);
 	const [saving, setSaving] = useState(false);
 	const [removing, setRemoving] = useState(false);
 
-	// Keep local name in sync when workspace changes
-	if (name !== currentName && !saving) {
-		setName(currentName);
-	}
-
 	async function handleSaveName(e: React.FormEvent) {
 		e.preventDefault();
-		if (!activePath || !name.trim()) return;
+		if (!name.trim()) return;
 		setSaving(true);
 		try {
-			await addWorkspace({ path: activePath, name: name.trim() });
+			await addWorkspace({ ...workspace, name: name.trim() });
 			await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
 		} finally {
 			setSaving(false);
@@ -42,37 +33,25 @@ export function SettingsPage() {
 	}
 
 	async function handleOpenFolder() {
-		if (!activePath) return;
-		await openPath(activePath);
+		await openPath(workspace.path);
 	}
 
 	async function handleRemove() {
-		if (!activePath) return;
 		setRemoving(true);
 		try {
-			await removeWorkspace(activePath);
+			await removeWorkspace(workspace.path);
 			await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
-			await queryClient.invalidateQueries({ queryKey: activeWorkspaceQueryKey });
-			navigate({ to: "/tasks" });
+			navigate({ to: "/" });
 		} finally {
 			setRemoving(false);
 		}
-	}
-
-	if (!workspace) {
-		return (
-			<div className="p-6">
-				<h1 className="text-lg font-semibold">Settings</h1>
-				<p className="mt-2 text-sm text-muted-foreground">No workspace selected.</p>
-			</div>
-		);
 	}
 
 	return (
 		<div className="p-6 max-w-lg flex flex-col gap-6">
 			<div>
 				<h1 className="text-lg font-semibold">Settings</h1>
-				<p className="mt-1 text-sm text-muted-foreground font-mono">{activePath}</p>
+				<p className="mt-1 text-sm text-muted-foreground font-mono">{workspace.path}</p>
 			</div>
 
 			<Separator />
@@ -94,7 +73,7 @@ export function SettingsPage() {
 							<Button
 								type="submit"
 								variant="outline"
-								disabled={saving || name.trim() === currentName}
+								disabled={saving || name.trim() === workspace.name}
 							>
 								{saving ? "Saving…" : "Save"}
 							</Button>
@@ -102,12 +81,7 @@ export function SettingsPage() {
 					</Field>
 				</form>
 
-				<Button
-					type="button"
-					variant="outline"
-					className="w-fit"
-					onClick={handleOpenFolder}
-				>
+				<Button type="button" variant="outline" className="w-fit" onClick={handleOpenFolder}>
 					<FolderOpen data-icon="inline-start" />
 					Open folder
 				</Button>

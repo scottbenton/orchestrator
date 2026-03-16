@@ -51,8 +51,9 @@ export type ResolvedConfig = {
 // ---------------------------------------------------------------------------
 
 export const WorkspaceListEntrySchema = z.object({
+	id: z.string().min(1).optional(),
 	path: z.string().min(1),
 	name: z.string().min(1),
 });
 
-export type WorkspaceListEntry = z.infer<typeof WorkspaceListEntrySchema>;
+export type WorkspaceListEntry = z.infer<typeof WorkspaceListEntrySchema> & { id: string };

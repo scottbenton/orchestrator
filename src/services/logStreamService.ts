@@ -2,6 +2,7 @@ import { Command } from "@tauri-apps/plugin-shell";
 import { v4 as uuid } from "uuid";
 import { getDb } from "@/lib/db";
 import type {
+	ClaudeStreamEvent,
 	InteractionResolution,
 	LogLine,
 	ProcessEvent,
@@ -18,26 +19,31 @@ export async function runProcess(
 		cwd: string;
 		taskId: string;
 		onEvent: (event: ProcessEvent) => void;
-	},
+	}
 ): Promise<{ handle: ProcessHandle; done: Promise<number> }> {
 	const db = await getDb();
 	const cmd = Command.create(program, args, { cwd: options.cwd });
 
-	const persistLog = (stream: LogLine["stream"], line: string): void => {
+	const persistLog = (stream: LogLine["stream"], line: string, raw?: ClaudeStreamEvent): void => {
 		const entry: LogLine = {
 			id: uuid(),
 			taskId: options.taskId,
 			timestamp: new Date().toISOString(),
 			stream,
 			line,
+			raw,
 		};
-		db.execute("INSERT INTO task_logs VALUES (?, ?, ?, ?, ?)", [
-			entry.id,
-			entry.taskId,
-			entry.timestamp,
-			entry.stream,
-			entry.line,
-		]).catch(console.error);
+		db.execute(
+			"INSERT INTO task_logs (id, task_id, timestamp, stream, line, raw_event) VALUES (?, ?, ?, ?, ?, ?)",
+			[
+				entry.id,
+				entry.taskId,
+				entry.timestamp,
+				entry.stream,
+				entry.line,
+				raw != null ? JSON.stringify(raw) : null,
+			]
+		).catch(console.error);
 		options.onEvent({ type: "log", data: entry });
 	};
 
@@ -60,10 +66,7 @@ export async function runProcess(
 	const child = await cmd.spawn();
 
 	const handle: ProcessHandle = {
-		respond: async (
-			interactionId: string,
-			resolution: InteractionResolution,
-		) => {
+		respond: async (interactionId: string, resolution: InteractionResolution) => {
 			await child.write(JSON.stringify({ interactionId, resolution }) + "\n");
 		},
 		kill: async () => {
@@ -77,7 +80,7 @@ export async function runProcess(
 export async function emitSystemLog(
 	taskId: string,
 	line: string,
-	onEvent?: (event: ProcessEvent) => void,
+	onEvent?: (event: ProcessEvent) => void
 ): Promise<void> {
 	const db = await getDb();
 	const entry: LogLine = {
@@ -87,13 +90,10 @@ export async function emitSystemLog(
 		stream: "system",
 		line,
 	};
-	await db.execute("INSERT INTO task_logs VALUES (?, ?, ?, ?, ?)", [
-		entry.id,
-		entry.taskId,
-		entry.timestamp,
-		entry.stream,
-		entry.line,
-	]);
+	await db.execute(
+		"INSERT INTO task_logs (id, task_id, timestamp, stream, line, raw_event) VALUES (?, ?, ?, ?, ?, ?)",
+		[entry.id, entry.taskId, entry.timestamp, entry.stream, entry.line, null]
+	);
 	onEvent?.({ type: "log", data: entry });
 }
 
@@ -106,16 +106,28 @@ export async function getTaskLogs(taskId: string): Promise<LogLine[]> {
 			timestamp: string;
 			stream: string;
 			line: string;
+			raw_event: string | null;
 		}>
 	>(
-		"SELECT id, task_id, timestamp, stream, line FROM task_logs WHERE task_id = ? ORDER BY timestamp ASC",
-		[taskId],
+		"SELECT id, task_id, timestamp, stream, line, raw_event FROM task_logs WHERE task_id = ? ORDER BY timestamp ASC",
+		[taskId]
 	);
-	return rows.map((row) => ({
-		id: row.id,
-		taskId: row.task_id,
-		timestamp: row.timestamp,
-		stream: row.stream as LogLine["stream"],
-		line: row.line,
-	}));
+	return rows.map((row) => {
+		let raw: ClaudeStreamEvent | undefined;
+		if (row.raw_event) {
+			try {
+				raw = JSON.parse(row.raw_event) as ClaudeStreamEvent;
+			} catch {
+				// malformed JSON — ignore
+			}
+		}
+		return {
+			id: row.id,
+			taskId: row.task_id,
+			timestamp: row.timestamp,
+			stream: row.stream as LogLine["stream"],
+			line: row.line,
+			raw,
+		};
+	});
 }

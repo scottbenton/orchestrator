@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+	Outlet,
 	createMemoryHistory,
 	createRootRoute,
 	createRoute,
@@ -28,6 +29,35 @@ export function renderWithProviders(ui: ReactNode, { queryClient = createTestQue
 	const router = createRouter({
 		routeTree,
 		history: createMemoryHistory({ initialEntries: ["/"] }),
+	});
+
+	return render(
+		<QueryClientProvider client={queryClient}>
+			<TooltipProvider>
+				<RouterProvider router={router} />
+			</TooltipProvider>
+		</QueryClientProvider>
+	);
+}
+
+/**
+ * Renders a component inside a `/$workspaceId` route context.
+ * Use this for components that call `useParams({ from: "/$workspaceId" })`.
+ */
+export function renderWithWorkspace(
+	ui: ReactNode,
+	{ workspaceId = "test-workspace-id", queryClient = createTestQueryClient() } = {}
+) {
+	const rootRoute = createRootRoute({ component: () => <Outlet /> });
+	const workspaceRoute = createRoute({
+		getParentRoute: () => rootRoute,
+		path: "$workspaceId",
+		component: () => <>{ui}</>,
+	});
+	const routeTree = rootRoute.addChildren([workspaceRoute]);
+	const router = createRouter({
+		routeTree,
+		history: createMemoryHistory({ initialEntries: [`/${workspaceId}`] }),
 	});
 
 	return render(

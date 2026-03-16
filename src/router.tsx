@@ -1,74 +1,59 @@
 import {
+	Outlet,
 	createRootRoute,
 	createRoute,
 	createRouter,
-	Outlet,
 	redirect,
-	useNavigate,
-	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
-import { useEffect } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useWorkspaces } from "@/hooks/api/useWorkspaces";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { getActiveWorkspacePath, getWorkspaces } from "@/services/workspaceListService";
 import { AiPage } from "@/pages/AiPage";
 import { CreateWorkspacePage } from "@/pages/CreateWorkspacePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { TasksPage } from "@/pages/TasksPage";
 
 function RootLayout() {
-	const { data: workspaces, isLoading } = useWorkspaces();
-	const navigate = useNavigate();
-	const pathname = useRouterState({ select: (s) => s.location.pathname });
-
-	useEffect(() => {
-		if (!isLoading && workspaces?.length === 0 && pathname !== "/create-workspace") {
-			navigate({ to: "/create-workspace" });
-		}
-	}, [workspaces, isLoading, pathname, navigate]);
-
-	const showSidebar = pathname !== "/create-workspace" && (workspaces?.length ?? 0) > 0;
-
 	return (
 		<TooltipProvider>
 			<div className="flex h-screen overflow-hidden bg-background text-foreground">
-				{showSidebar && <Sidebar />}
-				<main className="flex-1 overflow-auto">
-					<Outlet />
-				</main>
+				<Outlet />
 				{import.meta.env.DEV && <TanStackRouterDevtools />}
 			</div>
 		</TooltipProvider>
 	);
 }
 
+function WorkspaceLayout() {
+	return (
+		<>
+			<Sidebar />
+			<main className="flex-1 overflow-auto">
+				<Outlet />
+			</main>
+		</>
+	);
+}
+
 const rootRoute = createRootRoute({ component: RootLayout });
 
+// Redirect to last active workspace, or /create-workspace if none exist
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/",
-	beforeLoad: () => {
-		throw redirect({ to: "/tasks" });
+	beforeLoad: async () => {
+		const workspaces = await getWorkspaces();
+		if (workspaces.length === 0) {
+			throw redirect({ to: "/create-workspace" });
+		}
+		const activePath = await getActiveWorkspacePath();
+		const target = workspaces.find((w) => w.path === activePath) ?? workspaces[0];
+		throw redirect({
+			to: "/$workspaceId/tasks",
+			params: { workspaceId: target.id },
+		});
 	},
-});
-
-const tasksRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/tasks",
-	component: TasksPage,
-});
-
-const aiRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/ai",
-	component: AiPage,
-});
-
-const settingsRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: "/settings",
-	component: SettingsPage,
 });
 
 const createWorkspaceRoute = createRoute({
@@ -77,12 +62,43 @@ const createWorkspaceRoute = createRoute({
 	component: CreateWorkspacePage,
 });
 
+// Workspace layout route — validates workspaceId, redirects to / if not found
+export const workspaceRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "$workspaceId",
+	component: WorkspaceLayout,
+	beforeLoad: async ({ params }) => {
+		const workspaces = await getWorkspaces();
+		const workspace = workspaces.find((w) => w.id === params.workspaceId);
+		if (!workspace) {
+			throw redirect({ to: "/" });
+		}
+		return { workspace };
+	},
+});
+
+const tasksRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "tasks",
+	component: TasksPage,
+});
+
+const aiRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "ai",
+	component: AiPage,
+});
+
+const settingsRoute = createRoute({
+	getParentRoute: () => workspaceRoute,
+	path: "settings",
+	component: SettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
 	indexRoute,
-	tasksRoute,
-	aiRoute,
-	settingsRoute,
 	createWorkspaceRoute,
+	workspaceRoute.addChildren([tasksRoute, aiRoute, settingsRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

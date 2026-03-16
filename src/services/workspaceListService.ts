@@ -8,6 +8,10 @@ import {
 	WorkspaceListEntrySchema,
 } from "@/types/config";
 
+function generateId(): string {
+	return crypto.randomUUID();
+}
+
 // ---------------------------------------------------------------------------
 // Store singleton
 // ---------------------------------------------------------------------------
@@ -31,7 +35,20 @@ async function readWorkspaceList(): Promise<WorkspaceListEntry[]> {
 	const raw = await store.get<unknown>(WORKSPACES_KEY);
 	if (raw == null) return [];
 	const result = z.array(WorkspaceListEntrySchema).safeParse(raw);
-	return result.success ? result.data : [];
+	if (!result.success) return [];
+	// Migrate legacy entries that are missing an id
+	const entries = result.data as WorkspaceListEntry[];
+	let needsSave = false;
+	for (const entry of entries) {
+		if (!entry.id) {
+			entry.id = generateId();
+			needsSave = true;
+		}
+	}
+	if (needsSave) {
+		await store.set(WORKSPACES_KEY, entries);
+	}
+	return entries;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +85,7 @@ export async function createWorkspace(
 	await Promise.all(dirs.map((dir) => mkdir(dir, { recursive: true })));
 
 	const entry: WorkspaceListEntry = {
+		id: generateId(),
 		path,
 		name: options?.name ?? DEFAULT_WORKSPACE_SETTINGS.name,
 	};

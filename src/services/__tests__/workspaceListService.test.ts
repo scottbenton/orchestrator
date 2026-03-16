@@ -54,23 +54,23 @@ test("getWorkspaces returns empty array when none registered", async () => {
 });
 
 test("addWorkspace adds an entry", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
 	const result = await getWorkspaces();
 	expect(result).toHaveLength(1);
 	expect(result[0].name).toBe("One");
 });
 
 test("addWorkspace deduplicates by path (updates existing)", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
-	await addWorkspace({ path: "/ws/one", name: "Updated" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "Updated" });
 	const result = await getWorkspaces();
 	expect(result).toHaveLength(1);
 	expect(result[0].name).toBe("Updated");
 });
 
 test("removeWorkspace removes by path", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
-	await addWorkspace({ path: "/ws/two", name: "Two" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-two", path: "/ws/two", name: "Two" });
 	await removeWorkspace("/ws/one");
 	const result = await getWorkspaces();
 	expect(result).toHaveLength(1);
@@ -83,7 +83,7 @@ test("getActiveWorkspacePath returns null when not set", async () => {
 });
 
 test("setActiveWorkspacePath stores the active path", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
 	await setActiveWorkspacePath("/ws/one");
 	const result = await getActiveWorkspacePath();
 	expect(result).toBe("/ws/one");
@@ -94,7 +94,7 @@ test("setActiveWorkspacePath throws if path not in list", async () => {
 });
 
 test("clearActiveWorkspace unsets the active path", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
 	await setActiveWorkspacePath("/ws/one");
 	await clearActiveWorkspace();
 	const result = await getActiveWorkspacePath();
@@ -102,7 +102,7 @@ test("clearActiveWorkspace unsets the active path", async () => {
 });
 
 test("removeWorkspace clears active workspace if it was active", async () => {
-	await addWorkspace({ path: "/ws/one", name: "One" });
+	await addWorkspace({ id: "id-one", path: "/ws/one", name: "One" });
 	await setActiveWorkspacePath("/ws/one");
 	await removeWorkspace("/ws/one");
 	const active = await getActiveWorkspacePath();
