@@ -13,7 +13,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { workspaceRoute } from "@/router";
+import { useWorkspace } from "@/hooks/api/useWorkspace";
 import { type PermissionLevel, getBackend } from "@/services/aiBackend";
 import { emitSystemLog } from "@/services/logStreamService";
 import { useLogsStore } from "@/store/logsStore";
@@ -94,7 +94,7 @@ function makeTab(n: number, cwd: string): AiTab {
 // ---------------------------------------------------------------------------
 
 export function AiPage() {
-	const { workspace } = workspaceRoute.useRouteContext();
+	const workspace = useWorkspace();
 
 	const [tabs, setTabs] = useState<AiTab[]>([]);
 	const [activeTabIndex, setActiveTabIndex] = useState(0);
@@ -102,20 +102,20 @@ export function AiPage() {
 
 	// Load persisted tabs on mount / workspace change
 	useEffect(() => {
+		if (!workspace) return;
 		setLoaded(false);
 		loadPersistedTabs(workspace.id, workspace.path).then((loaded) => {
 			setTabs(loaded);
 			setActiveTabIndex(0);
 			setLoaded(true);
 		});
-	}, [workspace.id, workspace.path]);
+	}, [workspace?.id, workspace?.path]);
 
 	// Persist tabs whenever they change (after initial load)
 	useEffect(() => {
-		if (loaded && tabs.length > 0) {
-			persistTabs(workspace.id, tabs);
-		}
-	}, [loaded, tabs, workspace.id]);
+		if (!workspace || !loaded || tabs.length === 0) return;
+		persistTabs(workspace.id, tabs);
+	}, [loaded, tabs, workspace?.id]);
 
 	const updateTab = useCallback((id: string, patch: Partial<AiTab>) => {
 		setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -125,7 +125,7 @@ export function AiPage() {
 
 	function addTab() {
 		const n = tabs.length + 1;
-		const newTab = makeTab(n, workspace.path);
+		const newTab = makeTab(n, workspace?.path ?? "");
 		setTabs((prev) => [...prev, newTab]);
 		setActiveTabIndex(tabs.length);
 	}
@@ -133,7 +133,7 @@ export function AiPage() {
 	function closeTab(index: number) {
 		if (tabs.length === 1) {
 			// Replace with a fresh tab rather than leaving empty
-			const fresh = makeTab(1, workspace.path);
+			const fresh = makeTab(1, workspace?.path ?? "");
 			setTabs([fresh]);
 			setActiveTabIndex(0);
 			return;
@@ -142,7 +142,7 @@ export function AiPage() {
 		setActiveTabIndex((prev) => Math.min(prev, tabs.length - 2));
 	}
 
-	if (!loaded || !activeTab) return null;
+	if (!workspace || !loaded || !activeTab) return null;
 
 	return (
 		<div className="flex flex-col h-full min-h-0">
@@ -194,6 +194,7 @@ export function AiPage() {
 			{/* Bottom bar */}
 			<BottomBar
 				tab={activeTab}
+				workspaceName={workspace.name}
 				onUpdate={(patch) => updateTab(activeTab.id, patch)}
 				onSessionId={(id) => updateTab(activeTab.id, { sessionId: id })}
 				onAutoName={(name) => updateTab(activeTab.id, { name, isDefaultName: false })}
@@ -208,13 +209,13 @@ export function AiPage() {
 
 interface BottomBarProps {
 	tab: AiTab;
+	workspaceName: string;
 	onUpdate: (patch: Partial<AiTab>) => void;
 	onSessionId: (id: string) => void;
 	onAutoName: (name: string) => void;
 }
 
-function BottomBar({ tab, onUpdate, onSessionId, onAutoName }: BottomBarProps) {
-	const { workspace } = workspaceRoute.useRouteContext();
+function BottomBar({ tab, workspaceName, onUpdate, onSessionId, onAutoName }: BottomBarProps) {
 	const [prompt, setPrompt] = useState("");
 	const [running, setRunning] = useState(false);
 	const autoNamedRef = useRef(false);
@@ -239,7 +240,7 @@ function BottomBar({ tab, onUpdate, onSessionId, onAutoName }: BottomBarProps) {
 			const backend = getBackend(
 				// Use default settings shape — backend type comes from workspace settings
 				// but for now we always use ClaudeCodeBackend
-				{ name: workspace.name, ai_backend: "claude-code" }
+				{ name: workspaceName, ai_backend: "claude-code" }
 			);
 
 			const { handle } = await backend.run(
@@ -277,7 +278,7 @@ function BottomBar({ tab, onUpdate, onSessionId, onAutoName }: BottomBarProps) {
 			clearHandle(tab.id);
 			setRunning(false);
 		}
-	}, [prompt, running, tab, workspace.name, onSessionId, onAutoName]);
+	}, [prompt, running, tab, workspaceName, onSessionId, onAutoName]);
 
 	const handleStop = useCallback(() => {
 		const { handles, clearHandle } = useLogsStore.getState();

@@ -18,6 +18,7 @@
       "allow": [{ "path": "$HOME/**" }]
     },
     "sql:default",
+    "sql:allow-execute",
     "store:default",
     "dialog:allow-open",
     "opener:default"

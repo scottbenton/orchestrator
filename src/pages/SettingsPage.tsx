@@ -7,20 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { useWorkspace } from "@/hooks/api/useWorkspace";
 import { workspacesQueryKey } from "@/hooks/api/useWorkspaces";
-import { workspaceRoute } from "@/router";
 import { addWorkspace, removeWorkspace } from "@/services/workspaceListService";
 
 export function SettingsPage() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { workspace } = workspaceRoute.useRouteContext();
+	const workspace = useWorkspace();
 
-	const [name, setName] = useState(workspace.name);
+	const [name, setName] = useState(workspace?.name ?? "");
 	const [saving, setSaving] = useState(false);
 	const [removing, setRemoving] = useState(false);
 
-	async function handleSaveName(e: React.FormEvent) {
+	if (!workspace) return null;
+
+	const handleSaveName = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!name.trim()) return;
 		setSaving(true);
@@ -30,13 +32,13 @@ export function SettingsPage() {
 		} finally {
 			setSaving(false);
 		}
-	}
+	};
 
-	async function handleOpenFolder() {
+	const handleOpenFolder = async () => {
 		await openPath(workspace.path);
-	}
+	};
 
-	async function handleRemove() {
+	const handleRemove = async () => {
 		setRemoving(true);
 		try {
 			await removeWorkspace(workspace.path);
@@ -45,7 +47,7 @@ export function SettingsPage() {
 		} finally {
 			setRemoving(false);
 		}
-	}
+	};
 
 	return (
 		<div className="p-6 max-w-lg flex flex-col gap-6">

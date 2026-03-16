@@ -69,11 +69,10 @@ export const workspaceRoute = createRoute({
 	component: WorkspaceLayout,
 	beforeLoad: async ({ params }) => {
 		const workspaces = await getWorkspaces();
-		const workspace = workspaces.find((w) => w.id === params.workspaceId);
-		if (!workspace) {
+		const exists = workspaces.some((w) => w.id === params.workspaceId);
+		if (!exists) {
 			throw redirect({ to: "/" });
 		}
-		return { workspace };
 	},
 });
 
