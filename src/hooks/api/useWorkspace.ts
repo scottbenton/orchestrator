@@ -1,6 +1,6 @@
 import { useParams } from "@tanstack/react-router";
-import { useWorkspaces } from "./useWorkspaces";
 import type { WorkspaceListEntry } from "@/types/config";
+import { useWorkspaces } from "./useWorkspaces";
 
 /**
  * Returns the WorkspaceListEntry for the workspace currently in the URL,

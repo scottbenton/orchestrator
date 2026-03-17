@@ -135,7 +135,7 @@ async function spawnAndConnect(
 	// Otherwise, we use the command directly (e.g. for future agents that have standalone binaries).
 	const [resolvedCmd, resolvedArgs] = resolveCommand(agentCmd, agentArgs);
 
-	const command = Command.create(resolvedCmd, resolvedArgs, { cwd, encoding: "raw" });
+	const command = Command.create(resolvedCmd, resolvedArgs, { cwd });
 
 	// --- ReadableStream: fed by stdout data events ---
 	let readableController!: ReadableStreamDefaultController<Uint8Array>;
@@ -148,6 +148,8 @@ async function spawnAndConnect(
 		},
 	});
 
+	const enc = new TextEncoder();
+
 	// --- WritableStream: writes to child stdin ---
 	let childRef: { write: (data: number[]) => Promise<void> } | null = null;
 	const writable = new WritableStream<Uint8Array>({
@@ -156,10 +158,12 @@ async function spawnAndConnect(
 		},
 	});
 
-	// Register stdout listener before spawn so no bytes are missed
-	command.stdout.on("data", (data: Uint8Array) => {
+	// Register stdout listener before spawn so no bytes are missed.
+	// Tauri delivers stdout as string lines (newline stripped), so re-add the
+	// newline before encoding to bytes for ndJsonStream.
+	command.stdout.on("data", (data: string) => {
 		try {
-			readableController.enqueue(data);
+			readableController.enqueue(enc.encode(`${data}\n`));
 		} catch {
 			// controller may already be closed
 		}
@@ -306,13 +310,7 @@ async function spawnAndConnect(
 		},
 	});
 
-	// If the agent requires authentication, provide it
-	if (initResponse.authMethods && initResponse.authMethods.length > 0) {
-		const firstMethod = initResponse.authMethods[0];
-		if (firstMethod) {
-			await conn.authenticate({ methodId: firstMethod.id });
-		}
-	}
+	void initResponse; // authentication is not implemented by claude-code-acp
 
 	return handleRef;
 }
@@ -339,29 +337,22 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 
 	switch (update.sessionUpdate) {
 		case "agent_message_chunk": {
-			const text =
-				"content" in update && Array.isArray(update.content)
-					? update.content
-							.filter((b: { type: string; text?: string }) => b.type === "text")
-							.map((b: { type: string; text?: string }) => b.text ?? "")
-							.join("")
-					: "text" in update
-						? String(update.text ?? "")
-						: "";
+			// ContentChunk.content is a single ContentBlock (not an array)
+			const block = (update as unknown as { content?: { type: string; text?: string } }).content;
+			const text = block?.type === "text" ? (block.text ?? "") : "";
 			return text ? [{ type: "message_chunk", text }] : [];
 		}
 
 		case "tool_call": {
-			const tc = update as {
-				sessionUpdate: string;
-				id?: string;
+			const tc = update as unknown as {
+				toolCallId?: string;
 				title?: string;
 				status?: string;
 			};
 			return [
 				{
 					type: "tool_call",
-					id: tc.id ?? "",
+					id: tc.toolCallId ?? "",
 					title: tc.title ?? "",
 					status: mapToolStatus(tc.status),
 				},
@@ -369,26 +360,21 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 		}
 
 		case "tool_call_update": {
-			const tcu = update as {
-				sessionUpdate: string;
-				id?: string;
+			const tcu = update as unknown as {
+				toolCallId?: string;
 				status?: string;
-				content?: string;
 			};
 			return [
 				{
 					type: "tool_call_update",
-					id: tcu.id ?? "",
+					id: tcu.toolCallId ?? "",
 					status: mapToolStatus(tcu.status),
-					content: tcu.content,
 				},
 			];
 		}
 
 		case "plan": {
-			// ACP Plan has `entries: PlanEntry[]` where each entry has `content`, `status`, `priority`
 			const p = update as unknown as {
-				sessionUpdate: string;
 				entries?: Array<{ content?: string; status?: string; priority?: string }>;
 			};
 			const entries: PlanEntry[] = (p.entries ?? []).map((e) => ({

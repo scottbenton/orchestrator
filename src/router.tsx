@@ -1,18 +1,18 @@
 import {
-	Outlet,
 	createRootRoute,
 	createRoute,
 	createRouter,
+	Outlet,
 	redirect,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { getActiveWorkspacePath, getWorkspaces } from "@/services/workspaceListService";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { AiPage } from "@/pages/AiPage";
 import { CreateWorkspacePage } from "@/pages/CreateWorkspacePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { TasksPage } from "@/pages/TasksPage";
+import { getActiveWorkspacePath, getWorkspaces } from "@/services/workspaceListService";
 
 function RootLayout() {
 	return (

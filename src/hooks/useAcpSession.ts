@@ -64,9 +64,17 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 
 		const bootstrap = async () => {
 			try {
-				const handle = existingSessionId
-					? await acpLoadSession(existingSessionId, cwd, acpCommand, acpArgs)
-					: await acpCreateSession(cwd, acpCommand, acpArgs);
+				let handle: AcpSessionHandle;
+				if (existingSessionId) {
+					try {
+						handle = await acpLoadSession(existingSessionId, cwd, acpCommand, acpArgs);
+					} catch {
+						// Session no longer exists on the agent — create a fresh one
+						handle = await acpCreateSession(cwd, acpCommand, acpArgs);
+					}
+				} else {
+					handle = await acpCreateSession(cwd, acpCommand, acpArgs);
+				}
 
 				if (!mountedRef.current) {
 					await handle.dispose();
@@ -75,7 +83,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 
 				handleRef.current = handle;
 
-				if (!existingSessionId) {
+				if (!existingSessionId || handle.sessionId !== existingSessionId) {
 					setSessionId(handle.sessionId);
 					opts.onSessionIdCreated(handle.sessionId);
 				}
@@ -197,9 +205,12 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 
 	const send = useCallback(
 		async (prompt: string) => {
-			if (!handleRef.current || isRunning) return;
+			if (!prompt.trim() || isRunning) return;
 
 			setMessages((prev) => [...prev, { type: "user", text: prompt }]);
+
+			if (!handleRef.current) return;
+
 			setIsRunning(true);
 			assistantIdRef.current = null;
 

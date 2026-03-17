@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { FolderOpen } from "lucide-react";
-import { useWorkspaces } from "@/hooks/api/useWorkspaces";
 import {
 	Select,
 	SelectContent,
@@ -11,6 +10,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useWorkspaces } from "@/hooks/api/useWorkspaces";
 import { setActiveWorkspacePath } from "@/services/workspaceListService";
 
 const NEW_WORKSPACE_SENTINEL = "__new_workspace__";

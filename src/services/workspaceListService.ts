@@ -3,15 +3,15 @@ import { z } from "zod";
 import { mkdir, writeTextFile } from "@/lib/fs";
 import { writeWorkspaceSettings } from "@/services/configService";
 import {
-	DEFAULT_WORKSPACE_SETTINGS,
-	type WorkspaceListEntry,
-	WorkspaceListEntrySchema,
-} from "@/types/config";
-import {
 	AGENT_INSTRUCTIONS_TEMPLATE,
 	CORRECTIONS_TEMPLATE,
 	MEMORY_TEMPLATE,
 } from "@/services/workspaceTemplates";
+import {
+	DEFAULT_WORKSPACE_SETTINGS,
+	type WorkspaceListEntry,
+	WorkspaceListEntrySchema,
+} from "@/types/config";
 
 function generateId(): string {
 	return crypto.randomUUID();
