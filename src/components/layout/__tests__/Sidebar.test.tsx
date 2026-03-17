@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders } from "@/test-utils";
+import { renderWithWorkspace } from "@/test-utils";
 
 mock.module("@/services/workspaceListService", () => ({
 	getWorkspaces: mock(() => Promise.resolve([])),
@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 test("renders nav items", async () => {
-	renderWithProviders(<Sidebar />);
+	renderWithWorkspace(<Sidebar />);
 	expect(await screen.findByText("Tasks")).toBeDefined();
 	expect(await screen.findByText("AI")).toBeDefined();
 	expect(await screen.findByText("Settings")).toBeDefined();
@@ -33,7 +33,7 @@ test("renders nav items", async () => {
 
 test("collapse toggle hides nav labels", async () => {
 	const user = userEvent.setup();
-	renderWithProviders(<Sidebar />);
+	renderWithWorkspace(<Sidebar />);
 
 	// Labels visible initially
 	expect(await screen.findByText("Tasks")).toBeDefined();
@@ -50,7 +50,7 @@ test("collapse toggle hides nav labels", async () => {
 test("collapse toggle expands sidebar again", async () => {
 	const user = userEvent.setup();
 	useUIStore.setState({ sidebarCollapsed: true });
-	renderWithProviders(<Sidebar />);
+	renderWithWorkspace(<Sidebar />);
 
 	const expandBtn = await screen.findByRole("button", { name: "Expand sidebar" });
 	await user.click(expandBtn);
@@ -60,7 +60,7 @@ test("collapse toggle expands sidebar again", async () => {
 
 test("dark mode toggle switches theme", async () => {
 	const user = userEvent.setup();
-	renderWithProviders(<Sidebar />);
+	renderWithWorkspace(<Sidebar />);
 
 	const toggleBtn = await screen.findByRole("button", { name: "Light mode" });
 	await user.click(toggleBtn);
@@ -71,7 +71,7 @@ test("dark mode toggle switches theme", async () => {
 
 test("dark mode toggle shows correct icon label based on current theme", async () => {
 	useUIStore.setState({ theme: "light" });
-	renderWithProviders(<Sidebar />);
+	renderWithWorkspace(<Sidebar />);
 
 	expect(await screen.findByRole("button", { name: "Dark mode" })).toBeDefined();
 });

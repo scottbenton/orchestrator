@@ -37,13 +37,13 @@ export function CreateWorkspacePage() {
 		setError(null);
 		setLoading(true);
 		try {
-			await createWorkspace(path, { name: name || undefined });
+			const workspace = await createWorkspace(path, { name: name || undefined });
 			await setActiveWorkspacePath(path);
 			await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
 			await queryClient.invalidateQueries({
 				queryKey: activeWorkspaceQueryKey,
 			});
-			navigate({ to: "/tasks" });
+			navigate({ to: "/$workspaceId/tasks", params: { workspaceId: workspace.id } });
 		} catch (err) {
 			console.error("Failed to create workspace:", err);
 			setError(
@@ -91,8 +91,7 @@ export function CreateWorkspacePage() {
 
 					<Field>
 						<FieldLabel htmlFor="workspace-name">
-							Name{" "}
-							<span className="text-muted-foreground font-normal">(optional)</span>
+							Name <span className="text-muted-foreground font-normal">(optional)</span>
 						</FieldLabel>
 						<Input
 							id="workspace-name"

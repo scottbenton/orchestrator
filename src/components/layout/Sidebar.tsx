@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useParams, useRouterState } from "@tanstack/react-router";
 import { Bot, CheckSquare, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -8,26 +8,22 @@ import { WorkspaceDropdown } from "./WorkspaceDropdown";
 
 interface NavItemProps {
 	to: string;
+	params: Record<string, string>;
 	icon: React.ReactNode;
 	label: string;
 	collapsed: boolean;
 }
 
-function NavItem({ to, icon, label, collapsed }: NavItemProps) {
+function NavItem({ to, params, icon, label, collapsed }: NavItemProps) {
 	const { location } = useRouterState();
-	const isActive = location.pathname === to;
+	const isActive = location.pathname.endsWith(`/${to.split("/").pop()}`);
 
 	if (collapsed) {
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<Button
-						asChild
-						variant={isActive ? "secondary" : "ghost"}
-						size="icon"
-						className="w-full"
-					>
-						<Link to={to}>
+					<Button asChild variant={isActive ? "secondary" : "ghost"} size="icon" className="w-full">
+						<Link to={to} params={params}>
 							{icon}
 							<span className="sr-only">{label}</span>
 						</Link>
@@ -39,12 +35,8 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
 	}
 
 	return (
-		<Button
-			asChild
-			variant={isActive ? "secondary" : "ghost"}
-			className="w-full justify-start"
-		>
-			<Link to={to}>
+		<Button asChild variant={isActive ? "secondary" : "ghost"} className="w-full justify-start">
+			<Link to={to} params={params}>
 				{icon}
 				{label}
 			</Link>
@@ -64,13 +56,7 @@ function SidebarAction({ onClick, icon, label, collapsed }: SidebarActionProps) 
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						className="w-full"
-						onClick={onClick}
-					>
+					<Button type="button" variant="ghost" size="icon" className="w-full" onClick={onClick}>
 						{icon}
 						<span className="sr-only">{label}</span>
 					</Button>
@@ -81,12 +67,7 @@ function SidebarAction({ onClick, icon, label, collapsed }: SidebarActionProps) 
 	}
 
 	return (
-		<Button
-			type="button"
-			variant="ghost"
-			className="w-full justify-start"
-			onClick={onClick}
-		>
+		<Button type="button" variant="ghost" className="w-full justify-start" onClick={onClick}>
 			{icon}
 			{label}
 		</Button>
@@ -96,6 +77,8 @@ function SidebarAction({ onClick, icon, label, collapsed }: SidebarActionProps) 
 export function Sidebar() {
 	const { theme, sidebarCollapsed, toggleDark, toggleSidebar } = useUIStore();
 	const collapsed = sidebarCollapsed;
+	const { workspaceId } = useParams({ from: "/$workspaceId" });
+	const params = { workspaceId };
 
 	return (
 		<aside
@@ -113,13 +96,15 @@ export function Sidebar() {
 			{/* Main nav */}
 			<nav className="flex-1 p-2 flex flex-col gap-0.5">
 				<NavItem
-					to="/tasks"
+					to="/$workspaceId/tasks"
+					params={params}
 					icon={<CheckSquare data-icon="inline-start" />}
 					label="Tasks"
 					collapsed={collapsed}
 				/>
 				<NavItem
-					to="/ai"
+					to="/$workspaceId/ai"
+					params={params}
 					icon={<Bot data-icon="inline-start" />}
 					label="AI"
 					collapsed={collapsed}
@@ -130,7 +115,8 @@ export function Sidebar() {
 			{/* Bottom controls */}
 			<div className="p-2 flex flex-col gap-0.5">
 				<NavItem
-					to="/settings"
+					to="/$workspaceId/settings"
+					params={params}
 					icon={<Settings data-icon="inline-start" />}
 					label="Settings"
 					collapsed={collapsed}
@@ -138,11 +124,7 @@ export function Sidebar() {
 				<SidebarAction
 					onClick={toggleDark}
 					icon={
-						theme === "dark" ? (
-							<Sun data-icon="inline-start" />
-						) : (
-							<Moon data-icon="inline-start" />
-						)
+						theme === "dark" ? <Sun data-icon="inline-start" /> : <Moon data-icon="inline-start" />
 					}
 					label={theme === "dark" ? "Light mode" : "Dark mode"}
 					collapsed={collapsed}
