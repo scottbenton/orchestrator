@@ -3,7 +3,14 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
-import { ptyKill, ptyOnClose, ptyOnData, ptyResize, ptySpawn, ptyWrite } from "@/services/ptyService";
+import {
+	ptyKill,
+	ptyOnClose,
+	ptyOnData,
+	ptyResize,
+	ptySpawn,
+	ptyWrite,
+} from "@/services/ptyService";
 import { useUIStore } from "@/store/uiStore";
 
 // ---------------------------------------------------------------------------
@@ -72,9 +79,16 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
 	const fitRef = useRef<FitAddon | null>(null);
+	// Set to true once ptySpawn resolves — guards resize calls and listeners
+	const ptyReadyRef = useRef(false);
+	// Unlisten fns stored in refs so the mount cleanup can reach them
+	const unlistenDataRef = useRef<(() => void) | null>(null);
+	const unlistenCloseRef = useRef<(() => void) | null>(null);
 	const theme = useUIStore((s) => s.theme);
 
-	// Mount: create xterm instance, spawn PTY. id/program/args/cwd are stable per tab instance.
+	// Mount: open xterm and wire keyboard input only — no fit, no spawn.
+	// Fit and spawn happen in the active effect below so there is a single,
+	// ordered code path and no risk of ptyResize racing ptySpawn.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional mount-once effect
 	useEffect(() => {
 		if (!containerRef.current) return;
@@ -96,41 +110,19 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		termRef.current = term;
 		fitRef.current = fitAddon;
 
-		let unlistenData: (() => void) | null = null;
-		let unlistenClose: (() => void) | null = null;
-
-		// Defer fit + spawn to next frame so the browser has completed layout
-		// and the container has real dimensions before we measure.
-		const raf = requestAnimationFrame(() => {
-			fitAddon.fit();
-			const { rows, cols } = term;
-
-			ptySpawn(id, program, args, cwd, rows, cols).then(() => {
-				ptyOnData(id, (data) => term.write(data)).then((fn) => {
-					unlistenData = fn;
-				});
-				ptyOnClose(id, () => {
-					term.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
-				}).then((fn) => {
-					unlistenClose = fn;
-				});
-			});
-		});
-
-		// Input: terminal → PTY
 		const disposeOnData = term.onData((data) => {
 			ptyWrite(id, new TextEncoder().encode(data));
 		});
 
 		return () => {
-			cancelAnimationFrame(raf);
 			disposeOnData.dispose();
-			unlistenData?.();
-			unlistenClose?.();
+			unlistenDataRef.current?.();
+			unlistenCloseRef.current?.();
 			ptyKill(id);
 			term.dispose();
 			termRef.current = null;
 			fitRef.current = null;
+			ptyReadyRef.current = false;
 		};
 	}, []);
 
@@ -141,25 +133,44 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		}
 	}, [theme]);
 
-	// Resize when active or container changes size
+	// Active effect: owns fit, spawn (first activation), and resize (subsequent).
+	// The ResizeObserver is also gated on ptyReadyRef so it never calls ptyResize
+	// before the PTY exists.
 	useEffect(() => {
 		if (!isActive) return;
 		const container = containerRef.current;
 		if (!container) return;
 
 		const observer = new ResizeObserver(() => {
-			if (!fitRef.current || !termRef.current) return;
+			if (!ptyReadyRef.current || !fitRef.current || !termRef.current) return;
 			fitRef.current.fit();
 			ptyResize(id, termRef.current.rows, termRef.current.cols);
 		});
 		observer.observe(container);
 
-		// Defer fit until after the browser has applied display:block and laid out
 		const raf = requestAnimationFrame(() => {
 			if (!fitRef.current || !termRef.current) return;
 			fitRef.current.fit();
-			ptyResize(id, termRef.current.rows, termRef.current.cols);
-			termRef.current.refresh(0, termRef.current.rows - 1);
+			const { rows, cols } = termRef.current;
+
+			if (!ptyReadyRef.current) {
+				// First activation: spawn the PTY with correct dimensions
+				ptySpawn(id, program, args, cwd, rows, cols).then(() => {
+					ptyReadyRef.current = true;
+					ptyOnData(id, (data) => termRef.current?.write(data)).then((fn) => {
+						unlistenDataRef.current = fn;
+					});
+					ptyOnClose(id, () => {
+						termRef.current?.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
+					}).then((fn) => {
+						unlistenCloseRef.current = fn;
+					});
+				});
+			} else {
+				// Subsequent activations: resize and repaint
+				ptyResize(id, rows, cols);
+				termRef.current.refresh(0, rows - 1);
+			}
 		});
 
 		return () => {
