@@ -1,7 +1,9 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AcpSessionHandle } from "@/services/acpService";
+import type { AgentModeInfo, AgentModelInfo, AcpSessionHandle } from "@/services/acpService";
 import { acpCreateSession, acpLoadSession } from "@/services/acpService";
+
+export type { AgentModeInfo, AgentModelInfo };
 import type { AgentEvent, PermissionOption, PlanEntry, ToolCallStatus } from "@/types/acp";
 import type { PermissionMode } from "@/types/chatSettings";
 
@@ -31,6 +33,8 @@ export interface UseAcpSessionResult {
 	messages: ConversationMessage[];
 	isRunning: boolean;
 	sessionId: string | null;
+	availableModels: AgentModelInfo[];
+	availableModes: AgentModeInfo[];
 	send: (prompt: string) => Promise<void>;
 	stop: () => Promise<void>;
 	resolvePermission: (requestId: string, optionId: string) => void;
@@ -63,6 +67,8 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 	const [messages, setMessages] = useState<ConversationMessage[]>([]);
 	const [isRunning, setIsRunning] = useState(false);
 	const [sessionId, setSessionId] = useState<string | null>(opts.existingSessionId ?? null);
+	const [availableModels, setAvailableModels] = useState<AgentModelInfo[]>([]);
+	const [availableModes, setAvailableModes] = useState<AgentModeInfo[]>([]);
 
 	const handleRef = useRef<AcpSessionHandle | null>(null);
 	const assistantIdRef = useRef<string | null>(null);
@@ -133,6 +139,9 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 				}
 
 				handleRef.current = handle;
+
+				if (handle.availableModels.length > 0) setAvailableModels(handle.availableModels);
+				if (handle.availableModes.length > 0) setAvailableModes(handle.availableModes);
 
 				if (!existingSessionId || handle.sessionId !== existingSessionId) {
 					setSessionId(handle.sessionId);
@@ -324,7 +333,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 		);
 	}, []);
 
-	return { messages, isRunning, sessionId, send, stop, resolvePermission };
+	return { messages, isRunning, sessionId, availableModels, availableModes, send, stop, resolvePermission };
 }
 
 // ---------------------------------------------------------------------------

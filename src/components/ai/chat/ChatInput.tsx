@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { AgentModeInfo, AgentModelInfo } from "@/hooks/useAcpSession";
 import { cn } from "@/lib/utils";
 import {
   CLAUDE_MODELS,
@@ -22,8 +23,10 @@ interface ChatInputProps {
   onStop: () => void;
   model: ClaudeModel;
   onModelChange: (model: ClaudeModel) => void;
+  availableModels: AgentModelInfo[];
   permissionMode: PermissionMode;
   onPermissionModeChange: (mode: PermissionMode) => void;
+  availableModes: AgentModeInfo[];
 }
 
 export function ChatInput({
@@ -32,11 +35,23 @@ export function ChatInput({
   onStop,
   model,
   onModelChange,
+  availableModels,
   permissionMode,
   onPermissionModeChange,
+  availableModes,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const modelOptions =
+    availableModels.length > 0
+      ? availableModels.map((m) => ({ value: m.modelId, label: m.name }))
+      : CLAUDE_MODELS;
+
+  const modeOptions =
+    availableModes.length > 0
+      ? availableModes.map((m) => ({ value: m.id, label: m.name }))
+      : PERMISSION_MODES;
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -87,7 +102,7 @@ export function ChatInput({
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              {CLAUDE_MODELS.map((m) => (
+              {modelOptions.map((m) => (
                 <SelectItem key={m.value} value={m.value}>
                   {m.label}
                 </SelectItem>
@@ -102,13 +117,13 @@ export function ChatInput({
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              {PERMISSION_MODES.map((m) => (
+              {modeOptions.map((m) => (
                 <SelectItem key={m.value} value={m.value}>
                   {m.label}
                 </SelectItem>
               ))}
             </SelectContent>
-          </Select>{" "}
+          </Select>
           {isRunning ? (
             <Button
               type="button"

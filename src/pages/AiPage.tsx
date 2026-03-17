@@ -33,7 +33,7 @@ function AcpTab({
 	const [model, setModel] = useState<ClaudeModel>("claude-sonnet-4-6");
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
 
-	const { messages, isRunning, send, stop, resolvePermission } = useAcpSession({
+	const { messages, isRunning, send, stop, resolvePermission, availableModels, availableModes } = useAcpSession({
 		existingSessionId: tab.acpSessionId,
 		cwd: tab.cwd,
 		acpCommand,
@@ -57,8 +57,10 @@ function AcpTab({
 				onStop={stop}
 				model={model}
 				onModelChange={setModel}
+				availableModels={availableModels}
 				permissionMode={permissionMode}
 				onPermissionModeChange={setPermissionMode}
+				availableModes={availableModes}
 			/>
 		</div>
 	);

@@ -27,8 +27,20 @@ declare const __ACP_SCRIPT_PATH__: string;
 // Public API types
 // ---------------------------------------------------------------------------
 
+export interface AgentModelInfo {
+	modelId: string;
+	name: string;
+}
+
+export interface AgentModeInfo {
+	id: string;
+	name: string;
+}
+
 export interface AcpSessionHandle {
 	sessionId: string;
+	availableModels: AgentModelInfo[];
+	availableModes: AgentModeInfo[];
 	send(prompt: string, modelId?: string): Promise<void>;
 	cancel(): Promise<void>;
 	subscribe(handler: (event: AgentEvent) => void): () => void;
@@ -53,9 +65,11 @@ export async function acpCreateSession(
 	agentArgs: string[]
 ): Promise<AcpSessionHandle> {
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
-	const { sessionId } = await impl.conn.newSession({ cwd, mcpServers: [] });
-	impl.sessionId = sessionId;
-	sessions.set(sessionId, impl);
+	const response = await impl.conn.newSession({ cwd, mcpServers: [] });
+	impl.sessionId = response.sessionId;
+	impl.availableModels = extractModels(response);
+	impl.availableModes = extractModes(response);
+	sessions.set(response.sessionId, impl);
 	return impl;
 }
 
@@ -67,7 +81,9 @@ export async function acpLoadSession(
 ): Promise<AcpSessionHandle> {
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
 	impl.sessionId = sessionId;
-	await impl.conn.loadSession({ sessionId, cwd, mcpServers: [] });
+	const response = await impl.conn.loadSession({ sessionId, cwd, mcpServers: [] });
+	impl.availableModels = extractModels(response);
+	impl.availableModes = extractModes(response);
 	sessions.set(sessionId, impl);
 	return impl;
 }
@@ -78,6 +94,8 @@ export async function acpLoadSession(
 
 class AcpSessionHandleImpl implements AcpSessionHandle {
 	sessionId = "";
+	availableModels: AgentModelInfo[] = [];
+	availableModes: AgentModeInfo[] = [];
 	conn: ClientSideConnection;
 	permissionMode: PermissionMode = "default";
 	private listeners = new Set<(event: AgentEvent) => void>();
@@ -475,4 +493,18 @@ function mapToolStatus(status: string | undefined): ToolCallStatus {
 	if (status === "in_progress") return "in_progress";
 	if (status === "completed") return "completed";
 	return "pending";
+}
+
+// ---------------------------------------------------------------------------
+// Extract models/modes from session responses
+// ---------------------------------------------------------------------------
+
+type SessionResponse = { models?: { availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { availableModes?: Array<{ id: string; name: string }> } | null } | undefined | void;
+
+function extractModels(response: SessionResponse): AgentModelInfo[] {
+	return (response as { models?: { availableModels?: Array<{ modelId: string; name: string }> } | null } | null)?.models?.availableModels?.map((m) => ({ modelId: m.modelId, name: m.name })) ?? [];
+}
+
+function extractModes(response: SessionResponse): AgentModeInfo[] {
+	return (response as { modes?: { availableModes?: Array<{ id: string; name: string }> } | null } | null)?.modes?.availableModes?.map((m) => ({ id: m.id, name: m.name })) ?? [];
 }
