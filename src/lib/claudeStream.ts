@@ -30,16 +30,21 @@ export function formatStreamEvent(event: ClaudeStreamEvent): string | null {
 		}
 
 		case "assistant": {
-			const content = event.message?.content;
+			// Cast through unknown to work around TypeScript's inability to
+			// narrow the catch-all { type: string; [key: string]: unknown } variant.
+			const msg = (event as unknown as { message?: { content?: ContentBlock[] } }).message;
+			const content = msg?.content;
 			if (!Array.isArray(content)) return null;
 			const parts: string[] = [];
-			for (const block of content as ContentBlock[]) {
+			for (const block of content) {
 				switch (block.type) {
-					case "text":
-						if (block.text) parts.push(block.text);
+					case "text": {
+						const text = String(block.text ?? "");
+						if (text) parts.push(text);
 						break;
+					}
 					case "tool_use":
-						parts.push(`[Tool: ${block.name}]`);
+						parts.push(`[Tool: ${String(block.name ?? "")}]`);
 						break;
 					case "thinking":
 						// Extended thinking — skip by default (internal reasoning)

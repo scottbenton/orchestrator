@@ -1,93 +1,27 @@
-import { open } from "@tauri-apps/plugin-dialog";
-import { LazyStore } from "@tauri-apps/plugin-store";
+import { X, Plus, AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Plus, Send, Square, X } from "lucide-react";
-import { LogViewer } from "@/components/LogViewer";
+import { Terminal } from "@/components/Terminal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { useWorkspaceSettings } from "@/hooks/api/useWorkspaceSettings";
+import { getAgentDefinition } from "@/lib/agents";
+import { runCommand } from "@/lib/shell";
+import { ptyKill } from "@/services/ptyService";
+import { useTabsStore, type PersistedTab } from "@/store/tabsStore";
 import { useWorkspace } from "@/hooks/api/useWorkspace";
-import { type PermissionLevel, getBackend } from "@/services/aiBackend";
-import { emitSystemLog } from "@/services/logStreamService";
-import { useLogsStore } from "@/store/logsStore";
 
 // ---------------------------------------------------------------------------
-// Tab types
+// tmux session name from workspace + tab IDs
 // ---------------------------------------------------------------------------
 
-interface AiTab {
-	id: string;
-	name: string;
-	isDefaultName: boolean;
-	sessionId?: string;
-	cwd: string;
-	model: string;
-	permissions: PermissionLevel;
+function sessionName(workspaceId: string, tabId: string): string {
+	return `${workspaceId.slice(0, 8)}-${tabId.replace(/-/g, "").slice(0, 8)}`;
 }
-
-const MODELS = [
-	{ value: "default", label: "Default" },
-	{ value: "claude-opus-4-6", label: "Claude Opus 4.6" },
-	{ value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-	{ value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-] as const;
-
-const PERMISSIONS: { value: PermissionLevel; label: string }[] = [
-	{ value: "default", label: "Default permissions" },
-	{ value: "bypass", label: "Bypass permissions" },
-];
 
 // ---------------------------------------------------------------------------
-// Per-workspace tab persistence via plugin-store
+// Module-level tmux cache — persists across route navigation / remounts
 // ---------------------------------------------------------------------------
 
-function getTabStore(workspaceId: string) {
-	return new LazyStore(`ai_tabs_${workspaceId}.json`, {
-		defaults: { tabs: [] as AiTab[] },
-		autoSave: true,
-	});
-}
-
-async function loadPersistedTabs(workspaceId: string, defaultCwd: string): Promise<AiTab[]> {
-	try {
-		const store = getTabStore(workspaceId);
-		const raw = await store.get<AiTab[]>("tabs");
-		if (Array.isArray(raw) && raw.length > 0) {
-			return raw;
-		}
-	} catch {
-		// ignore
-	}
-	return [makeTab(1, defaultCwd)];
-}
-
-async function persistTabs(workspaceId: string, tabs: AiTab[]) {
-	try {
-		const store = getTabStore(workspaceId);
-		await store.set("tabs", tabs);
-	} catch {
-		// ignore
-	}
-}
-
-function makeTab(n: number, cwd: string): AiTab {
-	return {
-		id: crypto.randomUUID(),
-		name: `Session ${n}`,
-		isDefaultName: true,
-		sessionId: undefined,
-		cwd,
-		model: "default",
-		permissions: "default",
-	};
-}
+let tmuxCache: boolean | null = null;
 
 // ---------------------------------------------------------------------------
 // AiPage
@@ -95,322 +29,266 @@ function makeTab(n: number, cwd: string): AiTab {
 
 export function AiPage() {
 	const workspace = useWorkspace();
+	const { data: settings } = useWorkspaceSettings(workspace);
 
-	const [tabs, setTabs] = useState<AiTab[]>([]);
-	const [activeTabIndex, setActiveTabIndex] = useState(0);
-	const [loaded, setLoaded] = useState(false);
+	const { tabs, activeTabId, isLoaded, loadTabs, addTab, closeTab, setActiveTab, updateTabTitle } =
+		useTabsStore();
 
-	// Load persisted tabs on mount / workspace change
+	// tmux availability: seeded from module cache so route navigation is instant
+	const [tmuxAvailable, setTmuxAvailable] = useState<boolean | null>(tmuxCache);
+	const [tmuxBannerDismissed, setTmuxBannerDismissed] = useState(false);
+
+	// Load tabs on workspace change
 	useEffect(() => {
 		if (!workspace) return;
-		setLoaded(false);
-		loadPersistedTabs(workspace.id, workspace.path).then((loaded) => {
-			setTabs(loaded);
-			setActiveTabIndex(0);
-			setLoaded(true);
-		});
-	}, [workspace?.id, workspace?.path]);
+		loadTabs(workspace.id, workspace.path);
+	}, [workspace?.id, workspace?.path, workspace, loadTabs]);
 
-	// Persist tabs whenever they change (after initial load)
+	// Check tmux once per process lifetime (cache survives route navigation)
 	useEffect(() => {
-		if (!workspace || !loaded || tabs.length === 0) return;
-		persistTabs(workspace.id, tabs);
-	}, [loaded, tabs, workspace?.id]);
-
-	const updateTab = useCallback((id: string, patch: Partial<AiTab>) => {
-		setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-	}, []);
-
-	const activeTab = tabs[activeTabIndex] ?? tabs[0];
-
-	function addTab() {
-		const n = tabs.length + 1;
-		const newTab = makeTab(n, workspace?.path ?? "");
-		setTabs((prev) => [...prev, newTab]);
-		setActiveTabIndex(tabs.length);
-	}
-
-	function closeTab(index: number) {
-		if (tabs.length === 1) {
-			// Replace with a fresh tab rather than leaving empty
-			const fresh = makeTab(1, workspace?.path ?? "");
-			setTabs([fresh]);
-			setActiveTabIndex(0);
+		if (tmuxCache !== null) {
+			setTmuxAvailable(tmuxCache);
 			return;
 		}
-		setTabs((prev) => prev.filter((_, i) => i !== index));
-		setActiveTabIndex((prev) => Math.min(prev, tabs.length - 2));
+		runCommand("which", ["tmux"]).then(({ code }) => {
+			tmuxCache = code === 0;
+			setTmuxAvailable(tmuxCache);
+		});
+	}, []);
+
+	const agent =
+		settings ? getAgentDefinition(settings.ai_backend) : getAgentDefinition("claude-code");
+
+	function getSpawnArgs(tab: PersistedTab): { program: string; args: string[] } {
+		// tmuxAvailable is never null here — we gate rendering below
+		if (!tmuxAvailable) {
+			return { program: agent.command, args: agent.args };
+		}
+		const name = sessionName(workspace?.id ?? "", tab.id);
+		return {
+			program: "tmux",
+			args: ["attach-session", "-t", name],
+		};
 	}
 
-	if (!workspace || !loaded || !activeTab) return null;
+	async function handleAddTab() {
+		if (!workspace) return;
+		const tab = addTab(workspace.id, workspace.path);
+
+		if (tmuxAvailable) {
+			const name = sessionName(workspace.id, tab.id);
+			try {
+				await runCommand("tmux", [
+					"new-session",
+					"-d",
+					"-s",
+					name,
+					"-c",
+					tab.cwd,
+					"--",
+					agent.command,
+					...agent.args,
+				]);
+			} catch {
+				// tmux create failed — Terminal will spawn agent directly
+			}
+		}
+	}
+
+	async function handleCloseTab(tabId: string) {
+		if (!workspace) return;
+
+		// Kill the PTY attach process
+		await ptyKill(tabId);
+
+		// Kill the tmux session too (stops the agent)
+		if (tmuxAvailable) {
+			const name = sessionName(workspace.id, tabId);
+			runCommand("tmux", ["kill-session", "-t", name]).catch(() => {});
+		}
+
+		closeTab(workspace.id, tabId);
+	}
+
+	// When tabs load (or tmux availability resolves), ensure each tmux session exists.
+	// Sessions may have survived an app close; if gone, create fresh ones.
+	useEffect(() => {
+		if (!isLoaded || !workspace || !settings || tmuxAvailable === null) return;
+		if (!tmuxAvailable) return;
+
+		for (const tab of tabs) {
+			const name = sessionName(workspace.id, tab.id);
+			runCommand("tmux", ["has-session", "-t", name]).then(({ code }) => {
+				if (code !== 0) {
+					runCommand("tmux", [
+						"new-session",
+						"-d",
+						"-s",
+						name,
+						"-c",
+						tab.cwd,
+						"--",
+						agent.command,
+						...agent.args,
+					]).catch(() => {});
+				}
+			});
+		}
+	}, [isLoaded, tmuxAvailable, workspace?.id, workspace, settings, tabs, agent]);
+
+	// Wait for tmux check before rendering terminals to avoid wrong spawn args
+	if (!workspace || !isLoaded || tmuxAvailable === null) return null;
 
 	return (
 		<div className="flex flex-col h-full min-h-0">
+			{/* tmux missing banner */}
+			{tmuxAvailable === false && !tmuxBannerDismissed && (
+				<div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-sm text-yellow-600 dark:text-yellow-400 shrink-0">
+					<AlertCircle className="size-4 shrink-0" />
+					<span className="flex-1">
+						Install <code className="font-mono">tmux</code> to enable session persistence across
+						app restarts.
+					</span>
+					<button
+						type="button"
+						className="shrink-0 hover:opacity-70"
+						onClick={() => setTmuxBannerDismissed(true)}
+					>
+						<X className="size-4" />
+					</button>
+				</div>
+			)}
+
 			{/* Tab bar */}
 			<div className="flex items-center gap-1 px-2 pt-1 border-b border-border shrink-0 overflow-x-auto">
-				{tabs.map((tab, i) => (
-					<div
+				{tabs.map((tab) => (
+					<TabButton
 						key={tab.id}
-						className={`group flex items-center rounded-t text-sm shrink-0 ${
-							i === activeTabIndex
-								? "bg-background border border-b-background border-border -mb-px"
-								: "text-muted-foreground"
-						}`}
-					>
-						<button
-							type="button"
-							className="px-3 py-1.5 max-w-32 truncate cursor-pointer hover:text-foreground"
-							onClick={() => setActiveTabIndex(i)}
-						>
-							{tab.name}
-						</button>
-						<button
-							type="button"
-							className="opacity-0 group-hover:opacity-100 mr-1 rounded hover:bg-muted p-0.5"
-							onClick={() => closeTab(i)}
-							aria-label={`Close ${tab.name}`}
-						>
-							<X className="size-3" />
-						</button>
-					</div>
+						tab={tab}
+						isActive={tab.id === activeTabId}
+						onActivate={() => setActiveTab(tab.id)}
+						onClose={() => handleCloseTab(tab.id)}
+						onRename={(title) => updateTabTitle(workspace.id, tab.id, title)}
+					/>
 				))}
 				<Button
 					type="button"
 					variant="ghost"
 					size="icon"
 					className="size-7 shrink-0"
-					onClick={addTab}
+					onClick={handleAddTab}
 					aria-label="New session"
 				>
 					<Plus className="size-4" />
 				</Button>
 			</div>
 
-			{/* Log viewer */}
-			<div className="flex-1 min-h-0">
-				<LogViewer taskId={activeTab.id} live />
+			{/* Terminals — all mounted, inactive ones hidden */}
+			<div className="flex-1 min-h-0 relative">
+				{tabs.map((tab) => (
+					<div
+						key={tab.id}
+						className="absolute inset-0"
+						style={{ display: tab.id === activeTabId ? "block" : "none" }}
+					>
+						<Terminal
+							id={tab.id}
+							{...getSpawnArgs(tab)}
+							cwd={tab.cwd}
+							isActive={tab.id === activeTabId}
+						/>
+					</div>
+				))}
 			</div>
-
-			{/* Bottom bar */}
-			<BottomBar
-				tab={activeTab}
-				workspaceName={workspace.name}
-				onUpdate={(patch) => updateTab(activeTab.id, patch)}
-				onSessionId={(id) => updateTab(activeTab.id, { sessionId: id })}
-				onAutoName={(name) => updateTab(activeTab.id, { name, isDefaultName: false })}
-			/>
 		</div>
 	);
 }
 
 // ---------------------------------------------------------------------------
-// BottomBar
+// TabButton — with double-click inline renaming
 // ---------------------------------------------------------------------------
 
-interface BottomBarProps {
-	tab: AiTab;
-	workspaceName: string;
-	onUpdate: (patch: Partial<AiTab>) => void;
-	onSessionId: (id: string) => void;
-	onAutoName: (name: string) => void;
+interface TabButtonProps {
+	tab: PersistedTab;
+	isActive: boolean;
+	onActivate: () => void;
+	onClose: () => void;
+	onRename: (title: string) => void;
 }
 
-function BottomBar({ tab, workspaceName, onUpdate, onSessionId, onAutoName }: BottomBarProps) {
-	const [prompt, setPrompt] = useState("");
-	const [running, setRunning] = useState(false);
-	const autoNamedRef = useRef(false);
+function TabButton({ tab, isActive, onActivate, onClose, onRename }: TabButtonProps) {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState(tab.title);
+	const inputRef = useRef<HTMLInputElement>(null);
 
-	// Reset auto-name flag when tab changes
+	const startEditing = useCallback(() => {
+		setDraft(tab.title);
+		setEditing(true);
+	}, [tab.title]);
+
+	// Focus input when editing starts
 	useEffect(() => {
-		autoNamedRef.current = !tab.isDefaultName;
-	}, [tab.isDefaultName]);
-
-	const handleSend = useCallback(async () => {
-		const trimmed = prompt.trim();
-		if (!trimmed || running) return;
-
-		setRunning(true);
-		setPrompt("");
-
-		const { appendLine, setHandle, clearHandle } = useLogsStore.getState();
-
-		try {
-			await emitSystemLog(tab.id, `[You]: ${trimmed}`, (event) => {
-				if (event.type === "log") appendLine(event.data);
-			});
-
-			const backend = getBackend(
-				// Use default settings shape — backend type comes from workspace settings
-				// but for now we always use ClaudeCodeBackend
-				{ name: workspaceName, ai_backend: "claude-code" }
-			);
-
-			const { handle } = await backend.run(
-				trimmed,
-				tab.cwd,
-				tab.id,
-				tab.sessionId,
-				(event) => {
-					if (event.type === "log") {
-						appendLine(event.data);
-						// Auto-name from first assistant text
-						if (
-							!autoNamedRef.current &&
-							tab.isDefaultName &&
-							event.data.raw?.type === "assistant"
-						) {
-							const text = event.data.line.trim();
-							if (text) {
-								const name = text.slice(0, 32) + (text.length > 32 ? "…" : "");
-								onAutoName(name);
-								autoNamedRef.current = true;
-							}
-						}
-					}
-				},
-				(id) => onSessionId(id),
-				{ model: tab.model, permissions: tab.permissions }
-			);
-
-			setHandle(tab.id, handle);
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			await emitSystemLog(tab.id, `[Error]: ${msg}`, (event) => {
-				if (event.type === "log") appendLine(event.data);
-			});
-		} finally {
-			clearHandle(tab.id);
-			setRunning(false);
+		if (editing) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
 		}
-	}, [prompt, running, tab, workspaceName, onSessionId, onAutoName]);
+	}, [editing]);
 
-	const handleStop = useCallback(() => {
-		const { handles, clearHandle } = useLogsStore.getState();
-		handles[tab.id]?.kill();
-		clearHandle(tab.id);
-		setRunning(false);
-	}, [tab.id]);
-
-	const handleKeyDown = useCallback(
-		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-			if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-				e.preventDefault();
-				handleSend();
-			}
-		},
-		[handleSend]
-	);
-
-	async function handleBrowse() {
-		const selected = await open({ directory: true, multiple: false });
-		if (typeof selected === "string") {
-			onUpdate({ cwd: selected });
+	const commitRename = useCallback(() => {
+		const trimmed = draft.trim();
+		if (trimmed && trimmed !== tab.title) {
+			onRename(trimmed);
 		}
-	}
+		setEditing(false);
+	}, [draft, tab.title, onRename]);
 
-	function resizeTextarea(el: HTMLTextAreaElement) {
-		el.style.height = "auto";
-		const maxHeight = 20 * 6 + 16; // 6 rows + padding
-		el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-	}
+	const cancelEditing = useCallback(() => {
+		setDraft(tab.title);
+		setEditing(false);
+	}, [tab.title]);
 
 	return (
-		<div className="border-t border-border p-3 flex flex-col gap-2 shrink-0">
-			{/* Options row */}
-			<div className="flex items-center gap-2">
-				<Select value={tab.model} onValueChange={(v) => onUpdate({ model: v })} disabled={running}>
-					<SelectTrigger size="sm" className="w-48" aria-label="Model">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectGroup>
-							{MODELS.map((m) => (
-								<SelectItem key={m.value} value={m.value}>
-									{m.label}
-								</SelectItem>
-							))}
-						</SelectGroup>
-					</SelectContent>
-				</Select>
-
-				<Select
-					value={tab.permissions}
-					onValueChange={(v) => onUpdate({ permissions: v as PermissionLevel })}
-					disabled={running}
-				>
-					<SelectTrigger size="sm" className="w-48" aria-label="Permissions">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectGroup>
-							{PERMISSIONS.map((p) => (
-								<SelectItem key={p.value} value={p.value}>
-									{p.label}
-								</SelectItem>
-							))}
-						</SelectGroup>
-					</SelectContent>
-				</Select>
-			</div>
-
-			{/* CWD row */}
-			<div className="flex items-center gap-2">
-				<Input
-					value={tab.cwd}
-					onChange={(e) => onUpdate({ cwd: e.target.value })}
-					className="flex-1 font-mono text-xs h-7"
-					aria-label="Working directory"
-					disabled={running}
-				/>
-				<Button
-					type="button"
-					variant="outline"
-					size="icon"
-					className="size-7 shrink-0"
-					onClick={handleBrowse}
-					disabled={running}
-					aria-label="Browse for directory"
-				>
-					<FolderOpen className="size-3.5" />
-				</Button>
-			</div>
-
-			{/* Prompt row */}
-			<div className="flex items-end gap-2">
-				<textarea
-					value={prompt}
-					onChange={(e) => {
-						setPrompt(e.target.value);
-						resizeTextarea(e.target);
+		<div
+			className={`group flex items-center rounded-t text-sm shrink-0 ${
+				isActive
+					? "bg-background border border-b-background border-border -mb-px"
+					: "text-muted-foreground"
+			}`}
+		>
+			{editing ? (
+				<input
+					ref={inputRef}
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onBlur={commitRename}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") commitRename();
+						if (e.key === "Escape") cancelEditing();
 					}}
-					onKeyDown={handleKeyDown}
-					placeholder="Ask Claude… (⌘↵ to send)"
-					rows={1}
-					disabled={running}
-					className="flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 overflow-hidden min-h-[36px]"
+					className="px-3 py-1.5 w-32 bg-transparent text-sm outline-none border-none focus:ring-0"
+					aria-label="Rename tab"
 				/>
-				{running ? (
-					<Button
-						type="button"
-						variant="destructive"
-						size="icon"
-						onClick={handleStop}
-						aria-label="Stop"
-					>
-						<Square className="size-4" />
-					</Button>
-				) : (
-					<Button
-						type="button"
-						size="icon"
-						onClick={handleSend}
-						disabled={!prompt.trim()}
-						aria-label="Send"
-					>
-						<Send className="size-4" />
-					</Button>
-				)}
-			</div>
+			) : (
+				<button
+					type="button"
+					className="px-3 py-1.5 max-w-32 truncate cursor-pointer hover:text-foreground"
+					onClick={onActivate}
+					onDoubleClick={startEditing}
+				>
+					{tab.title}
+				</button>
+			)}
+			<button
+				type="button"
+				className="opacity-0 group-hover:opacity-100 mr-1 rounded hover:bg-muted p-0.5"
+				onClick={(e) => {
+					e.stopPropagation();
+					onClose();
+				}}
+				aria-label={`Close ${tab.title}`}
+			>
+				<X className="size-3" />
+			</button>
 		</div>
 	);
 }
