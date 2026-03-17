@@ -165,11 +165,5 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		};
 	}, [id, isActive]);
 
-	return (
-		<div
-			ref={containerRef}
-			style={{ display: isActive ? "block" : "none" }}
-			className="h-full w-full overflow-hidden"
-		/>
-	);
+	return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 }

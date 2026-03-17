@@ -136,6 +136,20 @@ export function AiPage() {
 		}
 	}, [isLoaded, tmuxAvailable, workspace?.id, workspace, settings, tabs, agent]);
 
+	// Track which tabs have ever been activated so we lazy-mount terminals.
+	// A terminal only mounts the first time its tab is made active, ensuring
+	// xterm.js always initialises against a visible, measurable container.
+	const [mountedTabIds, setMountedTabIds] = useState<Set<string>>(new Set());
+	useEffect(() => {
+		if (!activeTabId) return;
+		setMountedTabIds((prev) => {
+			if (prev.has(activeTabId)) return prev;
+			const next = new Set(prev);
+			next.add(activeTabId);
+			return next;
+		});
+	}, [activeTabId]);
+
 	// Wait for tmux check before rendering terminals to avoid wrong spawn args
 	if (!workspace || !isLoaded || tmuxAvailable === null) return null;
 
@@ -183,7 +197,7 @@ export function AiPage() {
 				</Button>
 			</div>
 
-			{/* Terminals — all mounted, inactive ones hidden */}
+			{/* Terminals — lazily mounted on first activation, then kept alive but hidden */}
 			<div className="flex-1 min-h-0 relative">
 				{tabs.map((tab) => (
 					<div
@@ -191,12 +205,14 @@ export function AiPage() {
 						className="absolute inset-0"
 						style={{ display: tab.id === activeTabId ? "block" : "none" }}
 					>
-						<Terminal
-							id={tab.id}
-							{...getSpawnArgs(tab)}
-							cwd={tab.cwd}
-							isActive={tab.id === activeTabId}
-						/>
+						{mountedTabIds.has(tab.id) && (
+							<Terminal
+								id={tab.id}
+								{...getSpawnArgs(tab)}
+								cwd={tab.cwd}
+								isActive={tab.id === activeTabId}
+							/>
+						)}
 					</div>
 				))}
 			</div>
