@@ -59,96 +59,65 @@ export function AiPage() {
 	const agent =
 		settings ? getAgentDefinition(settings.ai_backend) : getAgentDefinition("claude-code");
 
+	// Use `tmux new-session -A` — attach to existing session if present, create
+	// a new one with the agent command if not. This is atomic: no pre-creation
+	// step, no race between session creation and attachment.
 	function getSpawnArgs(tab: PersistedTab): { program: string; args: string[] } {
-		// tmuxAvailable is never null here — we gate rendering below
 		if (!tmuxAvailable) {
 			return { program: agent.command, args: agent.args };
 		}
 		const name = sessionName(workspace?.id ?? "", tab.id);
 		return {
 			program: "tmux",
-			args: ["attach-session", "-t", name],
+			args: ["new-session", "-A", "-s", name, "-c", tab.cwd, "--", agent.command, ...agent.args],
 		};
 	}
 
-	async function handleAddTab() {
+	// Tracks which tabs have ever been shown. Updated synchronously in event
+	// handlers so Terminal mounts in the same React commit as tab activation —
+	// no extra paint cycle with an empty container.
+	const [mountedTabIds, setMountedTabIds] = useState<Set<string>>(new Set());
+
+	function mountTab(tabId: string) {
+		setMountedTabIds((prev) => {
+			if (prev.has(tabId)) return prev;
+			const next = new Set(prev);
+			next.add(tabId);
+			return next;
+		});
+	}
+
+	// Mount the initially-active tab once tabs finish loading
+	useEffect(() => {
+		if (isLoaded && activeTabId) mountTab(activeTabId);
+	}, [isLoaded, activeTabId]);
+
+	function handleActivateTab(tabId: string) {
+		setActiveTab(tabId);
+		mountTab(tabId);
+	}
+
+	function handleAddTab() {
 		if (!workspace) return;
 		const tab = addTab(workspace.id, workspace.path);
-
-		if (tmuxAvailable) {
-			const name = sessionName(workspace.id, tab.id);
-			try {
-				await runCommand("tmux", [
-					"new-session",
-					"-d",
-					"-s",
-					name,
-					"-c",
-					tab.cwd,
-					"--",
-					agent.command,
-					...agent.args,
-				]);
-			} catch {
-				// tmux create failed — Terminal will spawn agent directly
-			}
-		}
+		// Mount synchronously — Terminal will use new-session -A to create+attach
+		mountTab(tab.id);
 	}
 
 	async function handleCloseTab(tabId: string) {
 		if (!workspace) return;
-
-		// Kill the PTY attach process
 		await ptyKill(tabId);
-
-		// Kill the tmux session too (stops the agent)
 		if (tmuxAvailable) {
 			const name = sessionName(workspace.id, tabId);
 			runCommand("tmux", ["kill-session", "-t", name]).catch(() => {});
 		}
-
 		closeTab(workspace.id, tabId);
-	}
-
-	// When tabs load (or tmux availability resolves), ensure each tmux session exists.
-	// Sessions may have survived an app close; if gone, create fresh ones.
-	useEffect(() => {
-		if (!isLoaded || !workspace || !settings || tmuxAvailable === null) return;
-		if (!tmuxAvailable) return;
-
-		for (const tab of tabs) {
-			const name = sessionName(workspace.id, tab.id);
-			runCommand("tmux", ["has-session", "-t", name]).then(({ code }) => {
-				if (code !== 0) {
-					runCommand("tmux", [
-						"new-session",
-						"-d",
-						"-s",
-						name,
-						"-c",
-						tab.cwd,
-						"--",
-						agent.command,
-						...agent.args,
-					]).catch(() => {});
-				}
-			});
-		}
-	}, [isLoaded, tmuxAvailable, workspace?.id, workspace, settings, tabs, agent]);
-
-	// Track which tabs have ever been activated so we lazy-mount terminals.
-	// A terminal only mounts the first time its tab is made active, ensuring
-	// xterm.js always initialises against a visible, measurable container.
-	const [mountedTabIds, setMountedTabIds] = useState<Set<string>>(new Set());
-	useEffect(() => {
-		if (!activeTabId) return;
 		setMountedTabIds((prev) => {
-			if (prev.has(activeTabId)) return prev;
 			const next = new Set(prev);
-			next.add(activeTabId);
+			next.delete(tabId);
 			return next;
 		});
-	}, [activeTabId]);
+	}
 
 	// Wait for tmux check before rendering terminals to avoid wrong spawn args
 	if (!workspace || !isLoaded || tmuxAvailable === null) return null;
@@ -180,7 +149,7 @@ export function AiPage() {
 						key={tab.id}
 						tab={tab}
 						isActive={tab.id === activeTabId}
-						onActivate={() => setActiveTab(tab.id)}
+						onActivate={() => handleActivateTab(tab.id)}
 						onClose={() => handleCloseTab(tab.id)}
 						onRename={(title) => updateTabTitle(workspace.id, tab.id, title)}
 					/>
@@ -242,7 +211,6 @@ function TabButton({ tab, isActive, onActivate, onClose, onRename }: TabButtonPr
 		setEditing(true);
 	}, [tab.title]);
 
-	// Focus input when editing starts
 	useEffect(() => {
 		if (editing) {
 			inputRef.current?.focus();
