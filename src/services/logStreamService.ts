@@ -1,15 +1,15 @@
 import { Command } from "@tauri-apps/plugin-shell";
 import { v4 as uuid } from "uuid";
 import { getDb } from "@/lib/db";
-import type {
+import type { InteractionResolution, LogLine, ProcessEvent, ProcessHandle } from "@/types/logs";
+
+export type {
+	InteractionRequest,
 	InteractionResolution,
 	LogLine,
 	ProcessEvent,
 	ProcessHandle,
 } from "@/types/logs";
-
-export type { LogLine, ProcessEvent, ProcessHandle } from "@/types/logs";
-export type { InteractionRequest, InteractionResolution } from "@/types/logs";
 
 export async function runProcess(
 	program: string,
@@ -18,7 +18,7 @@ export async function runProcess(
 		cwd: string;
 		taskId: string;
 		onEvent: (event: ProcessEvent) => void;
-	},
+	}
 ): Promise<{ handle: ProcessHandle; done: Promise<number> }> {
 	const db = await getDb();
 	const cmd = Command.create(program, args, { cwd: options.cwd });
@@ -60,10 +60,7 @@ export async function runProcess(
 	const child = await cmd.spawn();
 
 	const handle: ProcessHandle = {
-		respond: async (
-			interactionId: string,
-			resolution: InteractionResolution,
-		) => {
+		respond: async (interactionId: string, resolution: InteractionResolution) => {
 			await child.write(JSON.stringify({ interactionId, resolution }) + "\n");
 		},
 		kill: async () => {
@@ -77,7 +74,7 @@ export async function runProcess(
 export async function emitSystemLog(
 	taskId: string,
 	line: string,
-	onEvent?: (event: ProcessEvent) => void,
+	onEvent?: (event: ProcessEvent) => void
 ): Promise<void> {
 	const db = await getDb();
 	const entry: LogLine = {
@@ -109,7 +106,7 @@ export async function getTaskLogs(taskId: string): Promise<LogLine[]> {
 		}>
 	>(
 		"SELECT id, task_id, timestamp, stream, line FROM task_logs WHERE task_id = ? ORDER BY timestamp ASC",
-		[taskId],
+		[taskId]
 	);
 	return rows.map((row) => ({
 		id: row.id,

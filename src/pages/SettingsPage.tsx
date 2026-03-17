@@ -1,26 +1,56 @@
-import { openPath } from "@tauri-apps/plugin-opener";
-import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { FolderOpen, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/hooks/api/useWorkspace";
+import { useWorkspaceSettings } from "@/hooks/api/useWorkspaceSettings";
 import { workspacesQueryKey } from "@/hooks/api/useWorkspaces";
+import { AGENT_DEFINITIONS } from "@/lib/agents";
+import { writeWorkspaceSettings } from "@/services/configService";
 import { addWorkspace, removeWorkspace } from "@/services/workspaceListService";
+import type { AIBackend } from "@/types/config";
 
 export function SettingsPage() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const workspace = useWorkspace();
+	const { data: settings } = useWorkspaceSettings(workspace);
 
 	const [name, setName] = useState(workspace?.name ?? "");
 	const [saving, setSaving] = useState(false);
 	const [removing, setRemoving] = useState(false);
+	const [savingAgent, setSavingAgent] = useState(false);
 
 	if (!workspace) return null;
+
+	const availableAgents = Object.values(AGENT_DEFINITIONS);
+	const currentBackend: AIBackend = settings?.ai_backend ?? "claude-code";
+
+	const handleAgentChange = async (value: string) => {
+		if (!settings) return;
+		setSavingAgent(true);
+		try {
+			await writeWorkspaceSettings(workspace.path, {
+				...settings,
+				ai_backend: value as AIBackend,
+			});
+			await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
+		} finally {
+			setSavingAgent(false);
+		}
+	};
 
 	const handleSaveName = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -87,6 +117,35 @@ export function SettingsPage() {
 					<FolderOpen data-icon="inline-start" />
 					Open folder
 				</Button>
+			</section>
+
+			<Separator />
+
+			<section className="flex flex-col gap-4">
+				<h2 className="text-sm font-semibold">AI Agent</h2>
+
+				<Field>
+					<FieldLabel htmlFor="ai-agent">Agent</FieldLabel>
+					<Select
+						value={currentBackend}
+						onValueChange={handleAgentChange}
+						disabled={savingAgent || !settings}
+					>
+						<SelectTrigger id="ai-agent" className="w-full">
+							<SelectValue placeholder="Select agent" />
+						</SelectTrigger>
+						<SelectContent>
+							{availableAgents.map((agent) => (
+								<SelectItem key={agent.id} value={agent.id}>
+									{agent.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<p className="text-xs text-muted-foreground">
+						{availableAgents.find((a) => a.id === currentBackend)?.description}
+					</p>
+				</Field>
 			</section>
 
 			<Separator />

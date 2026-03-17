@@ -9,31 +9,14 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         {
-          "name": "claude",
-          "cmd": "claude",
+          "name": "node",
+          "cmd": "node",
           "args": true,
           "sidecar": false
         },
         {
           "name": "sh",
           "cmd": "/bin/sh",
-          "args": true,
-          "sidecar": false
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "name": "which",
-          "cmd": "which",
-          "args": true,
-          "sidecar": false
-        },
-        {
-          "name": "tmux",
-          "cmd": "tmux",
           "args": true,
           "sidecar": false
         }

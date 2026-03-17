@@ -5,9 +5,21 @@ import tailwindcss from "@tailwindcss/vite";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// Absolute path to the claude-code-acp adapter script, injected at build time.
+// In dev: points to node_modules in the project tree.
+// Production builds: TODO — bundle the adapter as a sidecar resource.
+const ACP_SCRIPT_PATH = path.resolve(
+  __dirname,
+  "node_modules/@zed-industries/claude-code-acp/dist/index.js",
+);
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), react()],
+
+  define: {
+    __ACP_SCRIPT_PATH__: JSON.stringify(ACP_SCRIPT_PATH),
+  },
 
   resolve: {
     alias: {

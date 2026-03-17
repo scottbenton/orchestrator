@@ -7,18 +7,16 @@ export interface AIAgentDefinition {
 	/** Human-readable name shown in the UI */
 	name: string;
 
-	/** The binary to invoke (must be on PATH) */
-	command: string;
+	/**
+	 * The ACP adapter command to invoke.
+	 * Use 'node' for npm-based adapters; acpService resolves __ACP_SCRIPT_PATH__ automatically.
+	 * Future standalone binaries can specify their own command directly.
+	 */
+	acpCommand: string;
 
-	/** Arguments passed before any user-provided args */
-	args: string[];
+	/** Additional arguments passed to the ACP adapter (after any script path resolution) */
+	acpArgs: string[];
 
 	/** One-line description for UI tooltips / settings page */
 	description: string;
-
-	/**
-	 * Flag to pass a session ID to resume a previous conversation.
-	 * e.g., "--resume" for claude. undefined = no resume support.
-	 */
-	resumeFlag?: string;
 }

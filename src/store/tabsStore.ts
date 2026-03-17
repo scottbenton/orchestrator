@@ -10,6 +10,8 @@ export interface PersistedTab {
 	title: string;
 	cwd: string;
 	createdAt: string;
+	/** ACP session ID — set after first session creation, used to resume on re-focus */
+	acpSessionId?: string;
 }
 
 interface TabsState {
@@ -22,6 +24,7 @@ interface TabsState {
 	closeTab: (workspaceId: string, tabId: string) => void;
 	setActiveTab: (id: string) => void;
 	updateTabTitle: (workspaceId: string, tabId: string, title: string) => void;
+	updateTabSessionId: (workspaceId: string, tabId: string, sessionId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,8 +96,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 			return;
 		}
 		const next = tabs.filter((t) => t.id !== tabId);
-		const newActive =
-			activeTabId === tabId ? (next[next.length - 1]?.id ?? null) : activeTabId;
+		const newActive = activeTabId === tabId ? (next[next.length - 1]?.id ?? null) : activeTabId;
 		set({ tabs: next, activeTabId: newActive });
 		persist(workspaceId, next);
 	},
@@ -106,6 +108,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 	updateTabTitle: (workspaceId, tabId, title) => {
 		const { tabs } = get();
 		const next = tabs.map((t) => (t.id === tabId ? { ...t, title } : t));
+		set({ tabs: next });
+		persist(workspaceId, next);
+	},
+
+	updateTabSessionId: (workspaceId, tabId, sessionId) => {
+		const { tabs } = get();
+		const next = tabs.map((t) => (t.id === tabId ? { ...t, acpSessionId: sessionId } : t));
 		set({ tabs: next });
 		persist(workspaceId, next);
 	},
