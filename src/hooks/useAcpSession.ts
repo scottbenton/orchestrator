@@ -83,11 +83,9 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 	useEffect(() => {
 		const load = async () => {
 			const storeKey = `chat_${opts.workspaceId}.json`;
-			console.log("[ACP] loading messages from", storeKey, "key:", opts.tabId);
 			try {
 				const store = new LazyStore(storeKey);
 				const saved = await store.get<ConversationMessage[]>(opts.tabId);
-				console.log("[ACP] loaded messages:", saved);
 				if (!mountedRef.current || !Array.isArray(saved) || saved.length === 0) return;
 				// Sanitise in-flight state that can't survive a restart:
 				// - streaming assistant messages → mark complete
@@ -347,14 +345,11 @@ async function saveMessages(
 	messages: ConversationMessage[]
 ): Promise<void> {
 	if (messages.length === 0) return;
-	const storeKey = `chat_${workspaceId}.json`;
-	console.log("[ACP] saving", messages.length, "messages to", storeKey, "key:", tabId);
 	try {
-		const store = new LazyStore(storeKey);
+		const store = new LazyStore(`chat_${workspaceId}.json`);
 		await store.set(tabId, messages);
 		await store.save();
-		console.log("[ACP] save complete");
-	} catch (err) {
-		console.error("[ACP] failed to save messages:", err);
+	} catch {
+		// ignore — persistence is best-effort
 	}
 }
