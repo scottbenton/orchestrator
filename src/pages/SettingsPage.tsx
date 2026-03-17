@@ -50,7 +50,7 @@ export function SettingsPage() {
 	};
 
 	return (
-		<div className="p-6 max-w-lg flex flex-col gap-6">
+		<div className="h-full overflow-auto p-6 max-w-lg flex flex-col gap-6">
 			<div>
 				<h1 className="text-lg font-semibold">Settings</h1>
 				<p className="mt-1 text-sm text-muted-foreground font-mono">{workspace.path}</p>
