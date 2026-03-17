@@ -30,7 +30,9 @@ const MIGRATIONS: Array<(db: Database) => Promise<void>> = [
 				line      TEXT NOT NULL
 			)
 		`);
-		await db.execute("CREATE INDEX idx_task_logs_task_id ON task_logs(task_id)");
+		await db.execute(
+			"CREATE INDEX idx_task_logs_task_id ON task_logs(task_id)",
+		);
 		await db.execute(`
 			CREATE TABLE task_interactions (
 				id          TEXT PRIMARY KEY,
@@ -43,16 +45,16 @@ const MIGRATIONS: Array<(db: Database) => Promise<void>> = [
 				resolution  TEXT
 			)
 		`);
-		await db.execute("CREATE INDEX idx_task_interactions_task_id ON task_interactions(task_id)");
-	},
-	// v2 — AI tabs: store raw stream-json event alongside parsed line (issue #6)
-	async (db) => {
-		await db.execute("ALTER TABLE task_logs ADD COLUMN raw_event TEXT");
+		await db.execute(
+			"CREATE INDEX idx_task_interactions_task_id ON task_interactions(task_id)",
+		);
 	},
 ];
 
 async function migrate(db: Database): Promise<void> {
-	const [{ user_version }] = await db.select<[{ user_version: number }]>("PRAGMA user_version");
+	const [{ user_version }] = await db.select<[{ user_version: number }]>(
+		"PRAGMA user_version",
+	);
 
 	for (let i = user_version; i < MIGRATIONS.length; i++) {
 		await MIGRATIONS[i](db);

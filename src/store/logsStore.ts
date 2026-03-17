@@ -16,7 +16,11 @@ interface LogsState {
 	clearLogs: (taskId: string) => void;
 
 	upsertInteraction: (interaction: InteractionRequest) => void;
-	resolveInteraction: (taskId: string, id: string, resolution: InteractionResolution) => void;
+	resolveInteraction: (
+		taskId: string,
+		id: string,
+		resolution: InteractionResolution,
+	) => void;
 
 	setHandle: (taskId: string, handle: ProcessHandle) => void;
 	clearHandle: (taskId: string) => void;
@@ -35,7 +39,8 @@ export const useLogsStore = create<LogsState>((set) => ({
 			},
 		})),
 
-	setLogs: (taskId, lines) => set((state) => ({ logs: { ...state.logs, [taskId]: lines } })),
+	setLogs: (taskId, lines) =>
+		set((state) => ({ logs: { ...state.logs, [taskId]: lines } })),
 
 	clearLogs: (taskId) =>
 		set((state) => {
@@ -64,7 +69,7 @@ export const useLogsStore = create<LogsState>((set) => ({
 		set((state) => {
 			const existing = state.interactions[taskId] ?? [];
 			const updated = existing.map((i) =>
-				i.id === id ? { ...i, status: "resolved" as const, resolution } : i
+				i.id === id ? { ...i, status: "resolved" as const, resolution } : i,
 			);
 			return { interactions: { ...state.interactions, [taskId]: updated } };
 		}),
