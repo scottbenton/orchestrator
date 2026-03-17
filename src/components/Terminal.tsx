@@ -92,26 +92,28 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		term.loadAddon(fitAddon);
 		term.loadAddon(webLinksAddon);
 		term.open(containerRef.current);
-		fitAddon.fit();
 
 		termRef.current = term;
 		fitRef.current = fitAddon;
 
-		const { rows, cols } = term;
 		let unlistenData: (() => void) | null = null;
 		let unlistenClose: (() => void) | null = null;
 
-		// Wire up PTY
-		ptySpawn(id, program, args, cwd, rows, cols).then(() => {
-			// Data: PTY → terminal
-			ptyOnData(id, (data) => term.write(data)).then((fn) => {
-				unlistenData = fn;
-			});
-			// Close: show notice
-			ptyOnClose(id, () => {
-				term.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
-			}).then((fn) => {
-				unlistenClose = fn;
+		// Defer fit + spawn to next frame so the browser has completed layout
+		// and the container has real dimensions before we measure.
+		const raf = requestAnimationFrame(() => {
+			fitAddon.fit();
+			const { rows, cols } = term;
+
+			ptySpawn(id, program, args, cwd, rows, cols).then(() => {
+				ptyOnData(id, (data) => term.write(data)).then((fn) => {
+					unlistenData = fn;
+				});
+				ptyOnClose(id, () => {
+					term.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
+				}).then((fn) => {
+					unlistenClose = fn;
+				});
 			});
 		});
 
@@ -121,6 +123,7 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		});
 
 		return () => {
+			cancelAnimationFrame(raf);
 			disposeOnData.dispose();
 			unlistenData?.();
 			unlistenClose?.();
