@@ -1,3 +1,4 @@
+import { formatStreamEvent } from "@/lib/claudeStream";
 import { runProcess } from "@/services/logStreamService";
 import type { ClaudeStreamEvent, ProcessEvent, ProcessHandle } from "@/types/logs";
 import type { WorkspaceSettings } from "@/types/config";
@@ -31,18 +32,21 @@ export class ClaudeCodeBackend implements AIBackend {
 		onSessionId: (id: string) => void,
 		options?: RunOptions
 	): Promise<{ handle: ProcessHandle; exitCode: number }> {
-		const args = ["--output-format", "stream-json", "--print", prompt];
+		const claudeArgs = ["--output-format", "stream-json", "--verbose", "--print", prompt];
 		if (sessionId) {
-			args.push("--resume", sessionId);
+			claudeArgs.push("--resume", sessionId);
 		}
 		if (options?.model && options.model !== "default") {
-			args.push("--model", options.model);
+			claudeArgs.push("--model", options.model);
 		}
 		if (options?.permissions === "bypass") {
-			args.push("--dangerously-skip-permissions");
+			claudeArgs.push("--dangerously-skip-permissions");
 		}
 
-		const { handle, done } = await runProcess("claude", args, {
+		// Run via /bin/sh so stdin is closed (</dev/null) and PATH is resolved
+		// from the user's shell environment.
+		const shellCmd = `claude ${claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} </dev/null`;
+		const { handle, done } = await runProcess("sh", ["-c", shellCmd], {
 			cwd,
 			taskId,
 			onEvent: (event) => {
@@ -60,17 +64,10 @@ export class ClaudeCodeBackend implements AIBackend {
 							onSessionId(raw.session_id);
 						}
 
-						// Replace the raw JSON line with human-readable text
-						const text = extractText(raw);
-						const enrichedEvent: ProcessEvent = {
-							type: "log",
-							data: {
-								...event.data,
-								line: text ?? event.data.line,
-								raw,
-							},
-						};
-						onEvent(enrichedEvent);
+						// Replace the raw JSON line with human-readable text; skip if null
+						const text = formatStreamEvent(raw);
+						if (text === null) return;
+						onEvent({ type: "log", data: { ...event.data, line: text, raw } });
 						return;
 					}
 				}
@@ -95,21 +92,6 @@ function tryParseStreamEvent(line: string): ClaudeStreamEvent | null {
 	return null;
 }
 
-// Extract the human-readable text from a stream event.
-// Returns null for non-text events (system, result) so the caller can
-// fall back to the raw JSON line.
-function extractText(event: ClaudeStreamEvent): string | null {
-	if (event.type !== "assistant") return null;
-	// Use explicit property access through unknown to avoid catch-all union narrowing issues
-	const message = (event as Record<string, unknown>).message;
-	if (!message || typeof message !== "object") return null;
-	const content = (message as Record<string, unknown>).content;
-	if (!Array.isArray(content)) return null;
-	const parts = (content as Array<Record<string, unknown>>)
-		.filter((c) => c.type === "text" && typeof c.text === "string")
-		.map((c) => c.text as string);
-	return parts.length > 0 ? parts.join("") : null;
-}
 
 export function getBackend(settings: WorkspaceSettings): AIBackend {
 	switch (settings.ai_backend) {

@@ -1,5 +1,6 @@
 import { Command } from "@tauri-apps/plugin-shell";
 import { v4 as uuid } from "uuid";
+import { formatStreamEvent } from "@/lib/claudeStream";
 import { getDb } from "@/lib/db";
 import type {
 	ClaudeStreamEvent,
@@ -53,6 +54,9 @@ export async function runProcess(
 	const done = new Promise<number>((resolve) => {
 		cmd.on("close", (data) => {
 			const exitCode = data.code ?? 0;
+			if (exitCode !== 0) {
+				persistLog("system", `Process exited with code ${exitCode}`);
+			}
 			options.onEvent({ type: "done", data: { exitCode } });
 			resolve(exitCode);
 		});
@@ -112,7 +116,7 @@ export async function getTaskLogs(taskId: string): Promise<LogLine[]> {
 		"SELECT id, task_id, timestamp, stream, line, raw_event FROM task_logs WHERE task_id = ? ORDER BY timestamp ASC",
 		[taskId]
 	);
-	return rows.map((row) => {
+	return rows.flatMap((row) => {
 		let raw: ClaudeStreamEvent | undefined;
 		if (row.raw_event) {
 			try {
@@ -120,14 +124,29 @@ export async function getTaskLogs(taskId: string): Promise<LogLine[]> {
 			} catch {
 				// malformed JSON — ignore
 			}
+		} else if (row.stream === "stdout") {
+			// raw_event is not stored for stdout lines (persistLog stores the raw JSON
+			// as `line` before aiBackend has a chance to parse it). Try parsing line itself.
+			try {
+				const parsed = JSON.parse(row.line);
+				if (parsed && typeof parsed === "object" && typeof parsed.type === "string") {
+					raw = parsed as ClaudeStreamEvent;
+				}
+			} catch {
+				// Not JSON — treat as plain text
+			}
 		}
-		return {
-			id: row.id,
-			taskId: row.task_id,
-			timestamp: row.timestamp,
-			stream: row.stream as LogLine["stream"],
-			line: row.line,
-			raw,
-		};
+		const line = raw ? formatStreamEvent(raw) : row.line;
+		if (line === null) return [];
+		return [
+			{
+				id: row.id,
+				taskId: row.task_id,
+				timestamp: row.timestamp,
+				stream: row.stream as LogLine["stream"],
+				line,
+				raw,
+			},
+		];
 	});
 }

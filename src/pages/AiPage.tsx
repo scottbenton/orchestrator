@@ -235,7 +235,9 @@ function BottomBar({ tab, workspaceName, onUpdate, onSessionId, onAutoName }: Bo
 		const { appendLine, setHandle, clearHandle } = useLogsStore.getState();
 
 		try {
-			await emitSystemLog(tab.id, `[You]: ${trimmed}`);
+			await emitSystemLog(tab.id, `[You]: ${trimmed}`, (event) => {
+				if (event.type === "log") appendLine(event.data);
+			});
 
 			const backend = getBackend(
 				// Use default settings shape — backend type comes from workspace settings
@@ -273,7 +275,9 @@ function BottomBar({ tab, workspaceName, onUpdate, onSessionId, onAutoName }: Bo
 			setHandle(tab.id, handle);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			await emitSystemLog(tab.id, `[Error]: ${msg}`);
+			await emitSystemLog(tab.id, `[Error]: ${msg}`, (event) => {
+				if (event.type === "log") appendLine(event.data);
+			});
 		} finally {
 			clearHandle(tab.id);
 			setRunning(false);

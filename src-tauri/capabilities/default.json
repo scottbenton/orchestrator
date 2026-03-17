@@ -5,7 +5,23 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-spawn",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "sh",
+          "cmd": "/bin/sh",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
     "shell:allow-kill",
     "shell:allow-stdin-write",
     "fs:default",
