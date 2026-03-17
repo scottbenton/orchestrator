@@ -14,7 +14,7 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeTabId, onActivate, onClose, onRename, onAdd }: TabBarProps) {
 	return (
-		<div className="flex items-center gap-1 px-2 pt-1 border-b border-border shrink-0 overflow-x-auto">
+		<div className="flex items-center gap-1 px-2 pt-1 border-b border-border shrink-0 overflow-hidden">
 			{tabs.map((tab) => (
 				<TabButton
 					key={tab.id}
