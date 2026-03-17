@@ -14,6 +14,7 @@ import {
 	ndJsonStream,
 	type SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { homeDir } from "@tauri-apps/api/path";
 import { Command } from "@tauri-apps/plugin-shell";
 import { readTextFile, writeTextFile } from "@/lib/fs";
 import { ptyKill, ptyOnClose, ptyOnData, ptySpawn } from "@/services/ptyService";
@@ -173,7 +174,10 @@ async function spawnAndConnect(
 	// Otherwise, we use the command directly (e.g. for future agents that have standalone binaries).
 	const [resolvedCmd, resolvedArgs] = resolveCommand(agentCmd, agentArgs);
 
-	const command = Command.create(resolvedCmd, resolvedArgs, { cwd });
+	// Explicitly pass HOME so Claude Code can find its config at ~/.claude/ regardless
+	// of how the Tauri app was launched (GUI launch on macOS strips shell env vars).
+	const home = await homeDir();
+	const command = Command.create(resolvedCmd, resolvedArgs, { cwd, env: { HOME: home } });
 
 	// --- ReadableStream: fed by stdout data events ---
 	let readableController!: ReadableStreamDefaultController<Uint8Array>;
