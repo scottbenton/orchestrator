@@ -22,6 +22,23 @@
         }
       ]
     },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "which",
+          "cmd": "which",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "tmux",
+          "cmd": "tmux",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
     "shell:allow-kill",
     "shell:allow-stdin-write",
     "fs:default",
