@@ -66,6 +66,7 @@ export async function acpCreateSession(
 ): Promise<AcpSessionHandle> {
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
 	const response = await impl.conn.newSession({ cwd, mcpServers: [] });
+	console.log("[ACP] newSession response:", response);
 	impl.sessionId = response.sessionId;
 	impl.availableModels = extractModels(response);
 	impl.availableModes = extractModes(response);
@@ -82,6 +83,7 @@ export async function acpLoadSession(
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
 	impl.sessionId = sessionId;
 	const response = await impl.conn.loadSession({ sessionId, cwd, mcpServers: [] });
+	console.log("[ACP] loadSession response:", response);
 	impl.availableModels = extractModels(response);
 	impl.availableModes = extractModes(response);
 	sessions.set(sessionId, impl);

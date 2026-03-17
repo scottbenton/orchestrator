@@ -6,7 +6,7 @@ export const AGENT_DEFINITIONS: Partial<Record<AIBackend, AIAgentDefinition>> = 
 		id: "claude-code",
 		name: "Claude Code",
 		acpCommand: "node",
-		acpArgs: [],
+		acpArgs: ["--model", "claude-sonnet-4-6"],
 		description: "Anthropic's Claude Code CLI agent via ACP",
 	},
 };
