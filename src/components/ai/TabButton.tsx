@@ -47,6 +47,9 @@ export function TabButton({ tab, isActive, onActivate, onClose, onRename }: TabB
 					? "bg-background border border-b-background border-border -mb-px"
 					: "text-muted-foreground"
 			}`}
+			onAuxClick={(e) => {
+				if (e.button === 1) onClose();
+			}}
 		>
 			{editing ? (
 				<input
