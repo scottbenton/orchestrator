@@ -3,6 +3,12 @@
  * These map to the session/update notifications from the ACP protocol.
  */
 
+export interface PermissionOption {
+	optionId: string;
+	kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
+	name: string;
+}
+
 export type AgentEventKind =
 	| { type: "message_chunk"; text: string }
 	| { type: "tool_call"; id: string; title: string; status: ToolCallStatus }
@@ -13,6 +19,7 @@ export type AgentEventKind =
 			content?: string;
 	  }
 	| { type: "plan"; entries: PlanEntry[] }
+	| { type: "permission_request"; id: string; toolTitle: string; options: PermissionOption[] }
 	| { type: "session_complete"; stopReason: string }
 	| { type: "session_error"; error: string };
 

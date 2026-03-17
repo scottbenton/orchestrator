@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ChatInput } from "@/components/ai/chat/ChatInput";
 import { ChatView } from "@/components/ai/chat/ChatView";
 import { TabBar } from "@/components/ai/TabBar";
@@ -7,6 +7,7 @@ import { useWorkspaceSettings } from "@/hooks/api/useWorkspaceSettings";
 import { useAcpSession } from "@/hooks/useAcpSession";
 import { getAgentDefinition } from "@/lib/agents";
 import { type PersistedTab, useTabsStore } from "@/store/tabsStore";
+import { type ClaudeModel, type PermissionMode } from "@/types/chatSettings";
 
 // ---------------------------------------------------------------------------
 // Single-tab ACP chat panel
@@ -29,7 +30,10 @@ function AcpTab({
 	acpArgs,
 	onSessionIdCreated,
 }: AcpTabProps) {
-	const { messages, isRunning, send, stop } = useAcpSession({
+	const [model, setModel] = useState<ClaudeModel>("claude-sonnet-4-6");
+	const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+
+	const { messages, isRunning, send, stop, resolvePermission } = useAcpSession({
 		existingSessionId: tab.acpSessionId,
 		cwd: tab.cwd,
 		acpCommand,
@@ -37,6 +41,8 @@ function AcpTab({
 		workspaceId,
 		tabId: tab.id,
 		onSessionIdCreated: (sessionId) => onSessionIdCreated(tab.id, sessionId),
+		model,
+		permissionMode,
 	});
 
 	return (
@@ -44,8 +50,16 @@ function AcpTab({
 			className="absolute inset-0 flex flex-col min-h-0"
 			style={{ display: isActive ? "flex" : "none" }}
 		>
-			<ChatView messages={messages} />
-			<ChatInput isRunning={isRunning} onSend={send} onStop={stop} />
+			<ChatView messages={messages} isRunning={isRunning} resolvePermission={resolvePermission} />
+			<ChatInput
+				isRunning={isRunning}
+				onSend={send}
+				onStop={stop}
+				model={model}
+				onModelChange={setModel}
+				permissionMode={permissionMode}
+				onPermissionModeChange={setPermissionMode}
+			/>
 		</div>
 	);
 }

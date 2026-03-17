@@ -18,6 +18,7 @@ import { Command } from "@tauri-apps/plugin-shell";
 import { readTextFile, writeTextFile } from "@/lib/fs";
 import { ptyKill, ptyOnClose, ptyOnData, ptySpawn } from "@/services/ptyService";
 import type { AgentEvent, AgentEventKind, PlanEntry, ToolCallStatus } from "@/types/acp";
+import type { PermissionMode } from "@/types/chatSettings";
 
 // Injected by Vite at build time — absolute path to @zed-industries/claude-code-acp/dist/index.js
 declare const __ACP_SCRIPT_PATH__: string;
@@ -28,9 +29,11 @@ declare const __ACP_SCRIPT_PATH__: string;
 
 export interface AcpSessionHandle {
 	sessionId: string;
-	send(prompt: string): Promise<void>;
+	send(prompt: string, modelId?: string): Promise<void>;
 	cancel(): Promise<void>;
 	subscribe(handler: (event: AgentEvent) => void): () => void;
+	setPermissionMode(mode: PermissionMode): void;
+	resolvePermission(requestId: string, optionId: string): void;
 	dispose(): Promise<void>;
 }
 
@@ -76,13 +79,27 @@ export async function acpLoadSession(
 class AcpSessionHandleImpl implements AcpSessionHandle {
 	sessionId = "";
 	conn: ClientSideConnection;
+	permissionMode: PermissionMode = "default";
 	private listeners = new Set<(event: AgentEvent) => void>();
+	pendingPermissions = new Map<string, (optionId: string) => void>();
 	private disposed = false;
 	private child: { kill: () => Promise<void> };
 
 	constructor(conn: ClientSideConnection, child: { kill: () => Promise<void> }) {
 		this.conn = conn;
 		this.child = child;
+	}
+
+	setPermissionMode(mode: PermissionMode): void {
+		this.permissionMode = mode;
+	}
+
+	resolvePermission(requestId: string, optionId: string): void {
+		const resolve = this.pendingPermissions.get(requestId);
+		if (resolve) {
+			resolve(optionId);
+			this.pendingPermissions.delete(requestId);
+		}
 	}
 
 	emit(event: AgentEvent) {
@@ -94,10 +111,11 @@ class AcpSessionHandleImpl implements AcpSessionHandle {
 		return () => this.listeners.delete(handler);
 	}
 
-	async send(prompt: string): Promise<void> {
+	async send(prompt: string, modelId?: string): Promise<void> {
 		const response = await this.conn.prompt({
 			sessionId: this.sessionId,
 			prompt: [{ type: "text", text: prompt }],
+			...(modelId ? { modelId } : {}),
 		});
 		this.emit({
 			sessionId: this.sessionId,
@@ -205,15 +223,78 @@ async function spawnAndConnect(
 				}
 			},
 
-			// Required: permission requests — auto-approve with first option
+			// Required: permission requests — behavior driven by current permissionMode
 			async requestPermission(params) {
-				const firstOption = params.options[0];
-				return {
-					outcome: {
-						outcome: "selected" as const,
-						optionId: firstOption?.optionId ?? "allow",
-					},
-				};
+				const mode = handleRef.permissionMode;
+
+				if (mode === "plan") {
+					// Reject all tool calls — plan only, no execution
+					const rejectOption =
+						params.options.find((o) => o.kind === "reject_once") ??
+						params.options.find((o) => o.kind.startsWith("reject")) ??
+						params.options[0];
+					return {
+						outcome: {
+							outcome: "selected" as const,
+							optionId: rejectOption?.optionId ?? "reject",
+						},
+					};
+				}
+
+				if (mode === "bypassPermissions") {
+					// Allow everything, prefer allow_always
+					const allowOption =
+						params.options.find((o) => o.kind === "allow_always") ??
+						params.options.find((o) => o.kind === "allow_once") ??
+						params.options[0];
+					return {
+						outcome: {
+							outcome: "selected" as const,
+							optionId: allowOption?.optionId ?? "allow",
+						},
+					};
+				}
+
+				if (mode === "acceptEdits") {
+					// Auto-approve without asking
+					const firstOption = params.options[0];
+					return {
+						outcome: {
+							outcome: "selected" as const,
+							optionId: firstOption?.optionId ?? "allow",
+						},
+					};
+				}
+
+				// default: surface to the user and wait for their response
+				const requestId = crypto.randomUUID();
+				const toolCallInfo = params.toolCall as unknown as { title?: string; name?: string };
+				const toolTitle = toolCallInfo?.title ?? toolCallInfo?.name ?? "tool";
+
+				return new Promise((resolve) => {
+					handleRef.pendingPermissions.set(requestId, (optionId: string) => {
+						resolve({
+							outcome: { outcome: "selected" as const, optionId },
+						});
+					});
+					handleRef.emit({
+						sessionId: handleRef.sessionId,
+						event: {
+							type: "permission_request",
+							id: requestId,
+							toolTitle,
+							options: params.options.map((o) => ({
+								optionId: o.optionId,
+								kind: o.kind as
+									| "allow_once"
+									| "allow_always"
+									| "reject_once"
+									| "reject_always",
+								name: o.name,
+							})),
+						},
+					});
+				});
 			},
 
 			// Optional: file system access
