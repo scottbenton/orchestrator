@@ -2,6 +2,7 @@ import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useRef } from "react";
 import {
 	ptyKill,
@@ -99,7 +100,7 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 			cursorBlink: true,
 		});
 		const fitAddon = new FitAddon();
-		const webLinksAddon = new WebLinksAddon();
+		const webLinksAddon = new WebLinksAddon((_event, url) => openUrl(url));
 
 		term.loadAddon(fitAddon);
 		term.loadAddon(webLinksAddon);
