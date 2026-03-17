@@ -151,13 +151,18 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		});
 		observer.observe(container);
 
-		// Fit immediately when becoming active
-		if (fitRef.current && termRef.current) {
+		// Defer fit until after the browser has applied display:block and laid out
+		const raf = requestAnimationFrame(() => {
+			if (!fitRef.current || !termRef.current) return;
 			fitRef.current.fit();
 			ptyResize(id, termRef.current.rows, termRef.current.cols);
-		}
+			termRef.current.refresh(0, termRef.current.rows - 1);
+		});
 
-		return () => observer.disconnect();
+		return () => {
+			cancelAnimationFrame(raf);
+			observer.disconnect();
+		};
 	}, [id, isActive]);
 
 	return (
