@@ -1,12 +1,17 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
-import { mkdir } from "@/lib/fs";
+import { mkdir, writeTextFile } from "@/lib/fs";
 import { writeWorkspaceSettings } from "@/services/configService";
 import {
 	DEFAULT_WORKSPACE_SETTINGS,
 	type WorkspaceListEntry,
 	WorkspaceListEntrySchema,
 } from "@/types/config";
+import {
+	AGENT_INSTRUCTIONS_TEMPLATE,
+	CORRECTIONS_TEMPLATE,
+	MEMORY_TEMPLATE,
+} from "@/services/workspaceTemplates";
 
 function generateId(): string {
 	return crypto.randomUUID();
@@ -83,6 +88,13 @@ export async function createWorkspace(
 		`${path}/_worktrees`,
 	];
 	await Promise.all(dirs.map((dir) => mkdir(dir, { recursive: true })));
+
+	// Write scaffold files
+	await Promise.all([
+		writeTextFile(`${path}/AGENT_INSTRUCTIONS.md`, AGENT_INSTRUCTIONS_TEMPLATE),
+		writeTextFile(`${path}/_memory/CORRECTIONS.md`, CORRECTIONS_TEMPLATE),
+		writeTextFile(`${path}/_memory/MEMORY.md`, MEMORY_TEMPLATE),
+	]);
 
 	const entry: WorkspaceListEntry = {
 		id: generateId(),
