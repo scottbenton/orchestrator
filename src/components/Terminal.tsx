@@ -79,16 +79,14 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
 	const fitRef = useRef<FitAddon | null>(null);
-	// Set to true once ptySpawn resolves — guards resize calls and listeners
+	// Guards ptyResize calls — a ref (not state) so ResizeObserver callbacks
+	// always see the current value without stale closure issues.
 	const ptyReadyRef = useRef(false);
-	// Unlisten fns stored in refs so the mount cleanup can reach them
-	const unlistenDataRef = useRef<(() => void) | null>(null);
-	const unlistenCloseRef = useRef<(() => void) | null>(null);
 	const theme = useUIStore((s) => s.theme);
 
-	// Mount: open xterm and wire keyboard input only — no fit, no spawn.
-	// Fit and spawn happen in the active effect below so there is a single,
-	// ordered code path and no risk of ptyResize racing ptySpawn.
+	// Mount: open xterm and register ALL PTY listeners before any spawn.
+	// Registering ptyOnData here (not after ptySpawn resolves) ensures we
+	// never miss the initial buffer replay that tmux sends on attach.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional mount-once effect
 	useEffect(() => {
 		if (!containerRef.current) return;
@@ -110,14 +108,28 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 		termRef.current = term;
 		fitRef.current = fitAddon;
 
+		// PTY → terminal: registered now so no data is missed between ptySpawn
+		// resolving and a listener being attached.
+		let unlistenData: (() => void) | null = null;
+		let unlistenClose: (() => void) | null = null;
+		ptyOnData(id, (data) => term.write(data)).then((fn) => {
+			unlistenData = fn;
+		});
+		ptyOnClose(id, () => {
+			term.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
+		}).then((fn) => {
+			unlistenClose = fn;
+		});
+
+		// Terminal → PTY: keyboard input
 		const disposeOnData = term.onData((data) => {
 			ptyWrite(id, new TextEncoder().encode(data));
 		});
 
 		return () => {
 			disposeOnData.dispose();
-			unlistenDataRef.current?.();
-			unlistenCloseRef.current?.();
+			unlistenData?.();
+			unlistenClose?.();
 			ptyKill(id);
 			term.dispose();
 			termRef.current = null;
@@ -134,13 +146,13 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 	}, [theme]);
 
 	// Active effect: owns fit, spawn (first activation), and resize (subsequent).
-	// The ResizeObserver is also gated on ptyReadyRef so it never calls ptyResize
-	// before the PTY exists.
 	useEffect(() => {
 		if (!isActive) return;
 		const container = containerRef.current;
 		if (!container) return;
 
+		// ResizeObserver is gated on ptyReadyRef — safe to call ptyResize only
+		// after the PTY exists. Uses the ref directly to avoid stale closures.
 		const observer = new ResizeObserver(() => {
 			if (!ptyReadyRef.current || !fitRef.current || !termRef.current) return;
 			fitRef.current.fit();
@@ -154,20 +166,18 @@ export function Terminal({ id, program, args, cwd, isActive }: TerminalProps) {
 			const { rows, cols } = termRef.current;
 
 			if (!ptyReadyRef.current) {
-				// First activation: spawn the PTY with correct dimensions
+				// First activation: spawn with the measured dimensions
 				ptySpawn(id, program, args, cwd, rows, cols).then(() => {
 					ptyReadyRef.current = true;
-					ptyOnData(id, (data) => termRef.current?.write(data)).then((fn) => {
-						unlistenDataRef.current = fn;
-					});
-					ptyOnClose(id, () => {
-						termRef.current?.writeln("\r\n\x1b[2m[Process exited]\x1b[0m");
-					}).then((fn) => {
-						unlistenCloseRef.current = fn;
-					});
+					// Resize again after the async spawn in case the container
+					// changed size while we were waiting for Rust to respond.
+					if (fitRef.current && termRef.current) {
+						fitRef.current.fit();
+						ptyResize(id, termRef.current.rows, termRef.current.cols);
+					}
 				});
 			} else {
-				// Subsequent activations: resize and repaint
+				// Subsequent activations: resize to current dimensions and repaint
 				ptyResize(id, rows, cols);
 				termRef.current.refresh(0, rows - 1);
 			}
