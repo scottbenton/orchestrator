@@ -207,7 +207,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 
   // Sync permissionMode to the handle whenever it changes
   useEffect(() => {
-    handleRef.current?.setPermissionMode(opts.permissionMode ?? "default");
+    void handleRef.current?.setPermissionMode(opts.permissionMode ?? "default");
   }, [opts.permissionMode]);
 
   // ---------------------------------------------------------------------------
@@ -327,6 +327,11 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
             return closed;
           });
           assistantIdRef.current = null;
+          break;
+        }
+
+        case "mode_update": {
+          setCurrentModeId(kind.modeId);
           break;
         }
 

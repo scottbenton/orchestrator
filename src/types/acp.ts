@@ -20,6 +20,7 @@ export type AgentEventKind =
 	  }
 	| { type: "plan"; entries: PlanEntry[] }
 	| { type: "permission_request"; id: string; toolTitle: string; options: PermissionOption[] }
+	| { type: "mode_update"; modeId: string }
 	| { type: "session_complete"; stopReason: string }
 	| { type: "session_error"; error: string };
 

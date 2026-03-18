@@ -46,7 +46,7 @@ export interface AcpSessionHandle {
 	send(prompt: string, modelId?: string): Promise<void>;
 	cancel(): Promise<void>;
 	subscribe(handler: (event: AgentEvent) => void): () => void;
-	setPermissionMode(mode: string): void;
+	setPermissionMode(mode: string): Promise<void>;
 	resolvePermission(requestId: string, optionId: string): void;
 	dispose(): Promise<void>;
 }
@@ -105,7 +105,6 @@ class AcpSessionHandleImpl implements AcpSessionHandle {
 	availableModels: AgentModelInfo[] = [];
 	availableModes: AgentModeInfo[] = [];
 	conn: ClientSideConnection;
-	permissionMode = "default";
 	private listeners = new Set<(event: AgentEvent) => void>();
 	pendingPermissions = new Map<string, (optionId: string) => void>();
 	private disposed = false;
@@ -116,8 +115,8 @@ class AcpSessionHandleImpl implements AcpSessionHandle {
 		this.child = child;
 	}
 
-	setPermissionMode(mode: string): void {
-		this.permissionMode = mode;
+	async setPermissionMode(mode: string): Promise<void> {
+		await this.conn.setSessionMode({ sessionId: this.sessionId, modeId: mode });
 	}
 
 	resolvePermission(requestId: string, optionId: string): void {
@@ -252,50 +251,8 @@ async function spawnAndConnect(
 				}
 			},
 
-			// Required: permission requests — behavior driven by current permissionMode
+			// Required: surface permission requests to the user
 			async requestPermission(params) {
-				const mode = handleRef.permissionMode;
-
-				if (mode === "plan") {
-					// Reject all tool calls — plan only, no execution
-					const rejectOption =
-						params.options.find((o) => o.kind === "reject_once") ??
-						params.options.find((o) => o.kind.startsWith("reject")) ??
-						params.options[0];
-					return {
-						outcome: {
-							outcome: "selected" as const,
-							optionId: rejectOption?.optionId ?? "reject",
-						},
-					};
-				}
-
-				if (mode === "bypassPermissions") {
-					// Allow everything, prefer allow_always
-					const allowOption =
-						params.options.find((o) => o.kind === "allow_always") ??
-						params.options.find((o) => o.kind === "allow_once") ??
-						params.options[0];
-					return {
-						outcome: {
-							outcome: "selected" as const,
-							optionId: allowOption?.optionId ?? "allow",
-						},
-					};
-				}
-
-				if (mode === "acceptEdits") {
-					// Auto-approve without asking
-					const firstOption = params.options[0];
-					return {
-						outcome: {
-							outcome: "selected" as const,
-							optionId: firstOption?.optionId ?? "allow",
-						},
-					};
-				}
-
-				// default: surface to the user and wait for their response
 				const requestId = crypto.randomUUID();
 				const toolCallInfo = params.toolCall as unknown as { title?: string; name?: string };
 				const toolTitle = toolCallInfo?.title ?? toolCallInfo?.name ?? "tool";
@@ -493,6 +450,11 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 				priority: (e.priority ?? "medium") as PlanEntry["priority"],
 			}));
 			return [{ type: "plan", entries }];
+		}
+
+		case "current_mode_update": {
+			const cmu = update as unknown as { currentModeId?: string };
+			return cmu.currentModeId ? [{ type: "mode_update", modeId: cmu.currentModeId }] : [];
 		}
 
 		default:
