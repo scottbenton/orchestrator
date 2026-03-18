@@ -24,10 +24,7 @@ export async function ptyKill(id: string): Promise<void> {
 	await invoke("pty_kill", { id });
 }
 
-export async function ptyOnData(
-	id: string,
-	cb: (data: Uint8Array) => void
-): Promise<() => void> {
+export async function ptyOnData(id: string, cb: (data: Uint8Array) => void): Promise<() => void> {
 	return listen<{ id: string; data: number[] }>("pty-data", (event) => {
 		if (event.payload.id === id) {
 			cb(new Uint8Array(event.payload.data));

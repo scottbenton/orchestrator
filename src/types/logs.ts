@@ -28,9 +28,6 @@ export type ProcessEvent =
 	| { type: "done"; data: { exitCode: number } };
 
 export type ProcessHandle = {
-	respond: (
-		interactionId: string,
-		resolution: InteractionResolution,
-	) => Promise<void>;
+	respond: (interactionId: string, resolution: InteractionResolution) => Promise<void>;
 	kill: () => Promise<void>;
 };

@@ -17,7 +17,7 @@ mock.module("@/lib/db", () => ({
 		Promise.resolve({
 			execute: mockExecute,
 			select: mockSelect,
-		}),
+		})
 	),
 }));
 
