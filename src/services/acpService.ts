@@ -19,7 +19,6 @@ import { Command } from "@tauri-apps/plugin-shell";
 import { readTextFile, writeTextFile } from "@/lib/fs";
 import { ptyKill, ptyOnClose, ptyOnData, ptySpawn } from "@/services/ptyService";
 import type { AgentEvent, AgentEventKind, PlanEntry, ToolCallStatus } from "@/types/acp";
-import type { PermissionMode } from "@/types/chatSettings";
 
 // Injected by Vite at build time — absolute path to @zed-industries/claude-code-acp/dist/index.js
 declare const __ACP_SCRIPT_PATH__: string;
@@ -40,12 +39,14 @@ export interface AgentModeInfo {
 
 export interface AcpSessionHandle {
 	sessionId: string;
+	currentModelId: string;
+	currentModeId: string;
 	availableModels: AgentModelInfo[];
 	availableModes: AgentModeInfo[];
 	send(prompt: string, modelId?: string): Promise<void>;
 	cancel(): Promise<void>;
 	subscribe(handler: (event: AgentEvent) => void): () => void;
-	setPermissionMode(mode: PermissionMode): void;
+	setPermissionMode(mode: string): void;
 	resolvePermission(requestId: string, optionId: string): void;
 	dispose(): Promise<void>;
 }
@@ -68,6 +69,8 @@ export async function acpCreateSession(
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
 	const response = await impl.conn.newSession({ cwd, mcpServers: [] });
 	impl.sessionId = response.sessionId;
+	impl.currentModelId = extractCurrentModelId(response);
+	impl.currentModeId = extractCurrentModeId(response);
 	impl.availableModels = extractModels(response);
 	impl.availableModes = extractModes(response);
 	sessions.set(response.sessionId, impl);
@@ -83,6 +86,8 @@ export async function acpLoadSession(
 	const impl = await spawnAndConnect(cwd, agentCmd, agentArgs);
 	impl.sessionId = sessionId;
 	const response = await impl.conn.loadSession({ sessionId, cwd, mcpServers: [] });
+	impl.currentModelId = extractCurrentModelId(response);
+	impl.currentModeId = extractCurrentModeId(response);
 	impl.availableModels = extractModels(response);
 	impl.availableModes = extractModes(response);
 	sessions.set(sessionId, impl);
@@ -95,10 +100,12 @@ export async function acpLoadSession(
 
 class AcpSessionHandleImpl implements AcpSessionHandle {
 	sessionId = "";
+	currentModelId = "";
+	currentModeId = "";
 	availableModels: AgentModelInfo[] = [];
 	availableModes: AgentModeInfo[] = [];
 	conn: ClientSideConnection;
-	permissionMode: PermissionMode = "default";
+	permissionMode = "default";
 	private listeners = new Set<(event: AgentEvent) => void>();
 	pendingPermissions = new Map<string, (optionId: string) => void>();
 	private disposed = false;
@@ -109,7 +116,7 @@ class AcpSessionHandleImpl implements AcpSessionHandle {
 		this.child = child;
 	}
 
-	setPermissionMode(mode: PermissionMode): void {
+	setPermissionMode(mode: string): void {
 		this.permissionMode = mode;
 	}
 
@@ -503,7 +510,15 @@ function mapToolStatus(status: string | undefined): ToolCallStatus {
 // Extract models/modes from session responses
 // ---------------------------------------------------------------------------
 
-type SessionResponse = { models?: { availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { availableModes?: Array<{ id: string; name: string }> } | null } | undefined | void;
+type SessionResponse = { models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { currentModeId?: string; availableModes?: Array<{ id: string; name: string }> } | null } | undefined | void;
+
+function extractCurrentModelId(response: SessionResponse): string {
+	return (response as { models?: { currentModelId?: string } | null } | null)?.models?.currentModelId ?? "";
+}
+
+function extractCurrentModeId(response: SessionResponse): string {
+	return (response as { modes?: { currentModeId?: string } | null } | null)?.modes?.currentModeId ?? "";
+}
 
 function extractModels(response: SessionResponse): AgentModelInfo[] {
 	return (response as { models?: { availableModels?: Array<{ modelId: string; name: string }> } | null } | null)?.models?.availableModels?.map((m) => ({ modelId: m.modelId, name: m.name })) ?? [];

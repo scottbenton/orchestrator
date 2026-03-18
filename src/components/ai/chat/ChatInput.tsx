@@ -10,22 +10,16 @@ import {
 } from "@/components/ui/select";
 import type { AgentModeInfo, AgentModelInfo } from "@/hooks/useAcpSession";
 import { cn } from "@/lib/utils";
-import {
-  CLAUDE_MODELS,
-  PERMISSION_MODES,
-  type ClaudeModel,
-  type PermissionMode,
-} from "@/types/chatSettings";
 
 interface ChatInputProps {
   isRunning: boolean;
   onSend: (prompt: string) => void;
   onStop: () => void;
-  model: ClaudeModel;
-  onModelChange: (model: ClaudeModel) => void;
+  model: string | undefined;
+  onModelChange: (model: string) => void;
   availableModels: AgentModelInfo[];
-  permissionMode: PermissionMode;
-  onPermissionModeChange: (mode: PermissionMode) => void;
+  permissionMode: string | undefined;
+  onPermissionModeChange: (mode: string) => void;
   availableModes: AgentModeInfo[];
 }
 
@@ -42,16 +36,6 @@ export function ChatInput({
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const modelOptions =
-    availableModels.length > 0
-      ? availableModels.map((m) => ({ value: m.modelId, label: m.name }))
-      : CLAUDE_MODELS;
-
-  const modeOptions =
-    availableModes.length > 0
-      ? availableModes.map((m) => ({ value: m.id, label: m.name }))
-      : PERMISSION_MODES;
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -94,36 +78,34 @@ export function ChatInput({
           className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground min-h-[24px]"
         />
         <div className="flex items-center justify-end gap-1.5 pt-1">
-          <Select
-            value={model}
-            onValueChange={(v) => onModelChange(v as ClaudeModel)}
-          >
-            <SelectTrigger size="sm" className="h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              {modelOptions.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={permissionMode}
-            onValueChange={(v) => onPermissionModeChange(v as PermissionMode)}
-          >
-            <SelectTrigger size="sm" className="h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              {modeOptions.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {availableModels.length > 0 && (
+            <Select value={model} onValueChange={onModelChange}>
+              <SelectTrigger size="sm" className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {availableModels.map((m) => (
+                  <SelectItem key={m.modelId} value={m.modelId}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {availableModes.length > 0 && (
+            <Select value={permissionMode} onValueChange={onPermissionModeChange}>
+              <SelectTrigger size="sm" className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {availableModes.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {isRunning ? (
             <Button
               type="button"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/ai/chat/ChatInput";
 import { ChatView } from "@/components/ai/chat/ChatView";
 import { TabBar } from "@/components/ai/TabBar";
@@ -7,8 +7,6 @@ import { useWorkspaceSettings } from "@/hooks/api/useWorkspaceSettings";
 import { useAcpSession } from "@/hooks/useAcpSession";
 import { getAgentDefinition } from "@/lib/agents";
 import { type PersistedTab, useTabsStore } from "@/store/tabsStore";
-import { type ClaudeModel, type PermissionMode } from "@/types/chatSettings";
-
 // ---------------------------------------------------------------------------
 // Single-tab ACP chat panel
 // ---------------------------------------------------------------------------
@@ -30,10 +28,12 @@ function AcpTab({
 	acpArgs,
 	onSessionIdCreated,
 }: AcpTabProps) {
-	const [model, setModel] = useState<ClaudeModel>("claude-sonnet-4-6");
-	const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+	const [model, setModel] = useState<string | undefined>(undefined);
+	const [permissionMode, setPermissionMode] = useState<string | undefined>(undefined);
+	const modelInitialized = useRef(false);
+	const modeInitialized = useRef(false);
 
-	const { messages, isRunning, send, stop, resolvePermission, availableModels, availableModes } = useAcpSession({
+	const { messages, isRunning, send, stop, resolvePermission, currentModelId, currentModeId, availableModels, availableModes } = useAcpSession({
 		existingSessionId: tab.acpSessionId,
 		cwd: tab.cwd,
 		acpCommand,
@@ -44,6 +44,21 @@ function AcpTab({
 		model,
 		permissionMode,
 	});
+
+	// Initialize model and mode from ACP session on first load
+	useEffect(() => {
+		if (currentModelId && !modelInitialized.current) {
+			modelInitialized.current = true;
+			setModel(currentModelId);
+		}
+	}, [currentModelId]);
+
+	useEffect(() => {
+		if (currentModeId && !modeInitialized.current) {
+			modeInitialized.current = true;
+			setPermissionMode(currentModeId);
+		}
+	}, [currentModeId]);
 
 	return (
 		<div
