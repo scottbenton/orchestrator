@@ -298,8 +298,9 @@ async function spawnAndConnect(
 			async createTerminal(params) {
 				// Use a unique terminal ID scoped to this connection
 				const terminalId = `acp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-				// Spawn a PTY with a minimal size; it runs headlessly for the agent
-				await ptySpawn(terminalId, params.command, params.args ?? [], params.cwd ?? cwd, 24, 80);
+				// The ACP adapter passes the full shell command string in params.command with no args.
+				// Run it through /bin/sh -c so that arguments, pipes, and shell syntax work.
+				await ptySpawn(terminalId, "/bin/sh", ["-c", params.command], params.cwd ?? cwd, 24, 80);
 				return { terminalId };
 			},
 
