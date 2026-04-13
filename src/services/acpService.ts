@@ -58,6 +58,21 @@ export interface AcpSessionHandle {
 const sessions = new Map<string, AcpSessionHandleImpl>();
 
 // ---------------------------------------------------------------------------
+// Terminal output buffer
+// Listeners are registered immediately on spawn so no output is missed,
+// even if the process exits before terminalOutput() is called.
+// ---------------------------------------------------------------------------
+
+interface TerminalBuffer {
+	chunks: string[];
+	closed: boolean;
+	closeResolvers: Array<() => void>;
+	unlistenData: (() => void) | null;
+}
+
+const terminalBuffers = new Map<string, TerminalBuffer>();
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -298,6 +313,31 @@ async function spawnAndConnect(
 			async createTerminal(params) {
 				// Use a unique terminal ID scoped to this connection
 				const terminalId = `acp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+				// Set up the buffer and register the data listener BEFORE spawning so no
+				// pty-data events are missed for fast-exiting commands.
+				const buf: TerminalBuffer = {
+					chunks: [],
+					closed: false,
+					closeResolvers: [],
+					unlistenData: null,
+				};
+				terminalBuffers.set(terminalId, buf);
+
+				const dec = new TextDecoder();
+				buf.unlistenData = await ptyOnData(terminalId, (data) => {
+					buf.chunks.push(dec.decode(data));
+				});
+
+				// Wire close events into the buffer so terminalOutput/waitForTerminalExit
+				// resolve correctly even when close fires before they're called.
+				// ptyOnClose is already backed by a buffered module-level listener (see ptyService.ts).
+				await ptyOnClose(terminalId, () => {
+					buf.closed = true;
+					for (const resolve of buf.closeResolvers) resolve();
+					buf.closeResolvers = [];
+				});
+
 				// The ACP adapter passes the full shell command string in params.command with no args.
 				// Run it through /bin/sh -c so that arguments, pipes, and shell syntax work.
 				await ptySpawn(terminalId, "/bin/sh", ["-c", params.command], params.cwd ?? cwd, 24, 80);
@@ -305,50 +345,31 @@ async function spawnAndConnect(
 			},
 
 			async terminalOutput(params) {
-				// Collect all buffered output from ptyService events
-				// Since ptyService is event-based, we accumulate output via a promise
+				const buf = terminalBuffers.get(params.terminalId);
+				if (!buf) {
+					return { output: "", truncated: false };
+				}
+
+				// If already closed, return accumulated output immediately.
+				if (buf.closed) {
+					return { output: stripAnsi(buf.chunks.join("")), truncated: false, exitStatus: { exitCode: 0 } };
+				}
+
+				// Otherwise wait for close.
 				return new Promise((resolve) => {
-					let output = "";
-					let settled = false;
-
-					const unlisten = ptyOnData(params.terminalId, (data) => {
-						output += new TextDecoder().decode(data);
+					buf.closeResolvers.push(() => {
+						resolve({ output: stripAnsi(buf.chunks.join("")), truncated: false, exitStatus: { exitCode: 0 } });
 					});
-
-					// ptyOnClose signals exit — resolve then
-					const unlistenClose = ptyOnClose(params.terminalId, () => {
-						if (!settled) {
-							settled = true;
-							Promise.all([unlisten, unlistenClose]).then(([ul, ulc]) => {
-								ul();
-								ulc();
-							});
-							resolve({ output, truncated: false, exitStatus: { exitCode: 0 } });
-						}
-					});
-
-					// Fallback: if close never fires, resolve after a short poll
-					setTimeout(() => {
-						if (!settled) {
-							settled = true;
-							Promise.all([unlisten, unlistenClose]).then(([ul, ulc]) => {
-								ul();
-								ulc();
-							});
-							resolve({ output, truncated: false });
-						}
-					}, 100);
 				});
 			},
 
 			async waitForTerminalExit(params) {
+				const buf = terminalBuffers.get(params.terminalId);
+				if (!buf || buf.closed) {
+					return { exitCode: 0 };
+				}
 				return new Promise((resolve) => {
-					ptyOnClose(params.terminalId, () => {
-						resolve({ exitCode: 0 });
-					}).then((unlisten) => {
-						// The unlisten is captured when needed
-						void unlisten;
-					});
+					buf.closeResolvers.push(() => resolve({ exitCode: 0 }));
 				});
 			},
 
@@ -358,6 +379,11 @@ async function spawnAndConnect(
 			},
 
 			async releaseTerminal(params) {
+				const buf = terminalBuffers.get(params.terminalId);
+				if (buf) {
+					buf.unlistenData?.();
+					terminalBuffers.delete(params.terminalId);
+				}
 				await ptyKill(params.terminalId);
 			},
 		};
@@ -431,12 +457,38 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 			const tcu = update as unknown as {
 				toolCallId?: string;
 				status?: string;
+				// ACP-style content blocks (used by most tools)
+				content?: Array<{ type: string; content?: { content?: { type: string; text?: string } } }>;
+				// Anthropic API format (used by mcp__acp__Bash via rawOutput)
+				rawOutput?: unknown;
 			};
+
+			let content: string | undefined;
+
+			// ACP content blocks: { type: "content", content: { content: { type: "text", text } } }
+			if (Array.isArray(tcu.content) && tcu.content.length > 0) {
+				const texts = tcu.content
+					.filter((c) => c.type === "content" && c.content?.content?.type === "text")
+					.map((c) => c.content?.content?.text ?? "")
+					.filter(Boolean);
+				if (texts.length > 0) content = texts.join("\n");
+			}
+
+			// rawOutput fallback: Anthropic API array [{ type: "text", text }]
+			// Used by mcp__acp__Bash since toolUpdateFromToolResult returns {} for it.
+			if (!content && Array.isArray(tcu.rawOutput)) {
+				const texts = (tcu.rawOutput as Array<{ type?: string; text?: string }>)
+					.filter((c) => c.type === "text" && c.text)
+					.map((c) => c.text ?? "");
+				if (texts.length > 0) content = texts.join("\n");
+			}
+
 			return [
 				{
 					type: "tool_call_update",
 					id: tcu.toolCallId ?? "",
 					status: mapToolStatus(tcu.status),
+					...(content !== undefined ? { content } : {}),
 				},
 			];
 		}
@@ -461,6 +513,29 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 		default:
 			return [];
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Strip ANSI/VT escape sequences from PTY output
+//
+// PTY output is raw terminal data and includes:
+//   - SGR color codes:  ESC [ <params> m
+//   - CSI sequences:    ESC [ <params> <final>
+//   - OSC sequences:    ESC ] <text> BEL  or  ESC ] <text> ESC \
+//   - Other ESC codes:  ESC <char>
+// ---------------------------------------------------------------------------
+
+// Matches all common VT/ANSI escape sequences.
+// Order matters: OSC (ESC]) must be checked before the single-char fallback ([@-Z\\-_])
+// because `]` (0x5D) falls in the \\-_ range and would otherwise be consumed alone,
+// leaving the OSC payload (e.g. "11;?") behind.
+// The OSC terminator (BEL or ESC\) is made optional to handle unterminated queries
+// such as ESC]11;? (terminal background-color query) that have no response in a headless PTY.
+const ANSI_ESCAPE_RE =
+	/[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
+
+function stripAnsi(text: string): string {
+	return text.replace(ANSI_ESCAPE_RE, "");
 }
 
 function mapToolStatus(status: string | undefined): ToolCallStatus {
