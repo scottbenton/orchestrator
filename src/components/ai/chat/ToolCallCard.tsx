@@ -27,7 +27,7 @@ export function ToolCallCard({ title, status, output }: ToolCallCardProps) {
 			<button
 				type="button"
 				className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors text-left"
-				onClick={() => setExpanded((v) => !v)}
+				onClick={() => output && setExpanded((v) => !v)}
 			>
 				<StatusIcon
 					className={cn(
@@ -38,12 +38,14 @@ export function ToolCallCard({ title, status, output }: ToolCallCardProps) {
 				/>
 				<Terminal className="size-3.5 shrink-0 text-muted-foreground" />
 				<span className="flex-1 font-mono text-xs truncate text-foreground">{title}</span>
-				<ChevronRight
-					className={cn(
-						"size-3.5 shrink-0 text-muted-foreground transition-transform",
-						expanded && "rotate-90"
-					)}
-				/>
+				{output && (
+					<ChevronRight
+						className={cn(
+							"size-3.5 shrink-0 text-muted-foreground transition-transform",
+							expanded && "rotate-90"
+						)}
+					/>
+				)}
 			</button>
 
 			{expanded && output && (

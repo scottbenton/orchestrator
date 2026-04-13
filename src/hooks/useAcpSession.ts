@@ -241,7 +241,24 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
 
         case "tool_call": {
           setMessages((prev) => {
-            // Close any in-progress assistant message first
+            // If a card with this ID already exists, update it in-place.
+            const existingIdx = prev.findIndex(
+              (m) => m.type === "tool_call" && m.id === kind.id,
+            );
+            if (existingIdx >= 0) {
+              const next = [...prev];
+              const existing = next[existingIdx] as Extract<
+                ConversationMessage,
+                { type: "tool_call" }
+              >;
+              next[existingIdx] = {
+                ...existing,
+                title: kind.title || existing.title,
+                status: kind.status,
+              };
+              return next;
+            }
+            // New tool call — close any in-progress assistant message first.
             const closed = closePendingAssistant(prev);
             return [
               ...closed,
