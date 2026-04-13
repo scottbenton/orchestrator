@@ -5,7 +5,6 @@ import {
 	Outlet,
 	redirect,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AiPage } from "@/pages/AiPage";
@@ -19,7 +18,6 @@ function RootLayout() {
 		<TooltipProvider>
 			<div className="flex h-screen overflow-hidden bg-background text-foreground">
 				<Outlet />
-				{import.meta.env.DEV && <TanStackRouterDevtools />}
 			</div>
 		</TooltipProvider>
 	);
