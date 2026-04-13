@@ -106,6 +106,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
   // ---------------------------------------------------------------------------
 
   // Load persisted messages on mount (before the session is ready to receive events)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally mount-only
   useEffect(() => {
     const load = async () => {
       const storeKey = `chat_${opts.workspaceId}.json`;
@@ -137,6 +138,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
   // Bootstrap: create or load session on mount
   // ---------------------------------------------------------------------------
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally mount-only — opts values are captured once at mount
   useEffect(() => {
     mountedRef.current = true;
 
@@ -214,6 +216,7 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
   // Event → message state
   // ---------------------------------------------------------------------------
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opts fields are stable for component lifetime
   const handleEvent = useCallback(
     (event: AgentEvent) => {
       const { event: kind } = event;
@@ -361,7 +364,6 @@ export function useAcpSession(opts: UseAcpSessionOptions): UseAcpSessionResult {
       }
     },
     // opts.workspaceId and opts.tabId are stable for the component lifetime
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 

@@ -61,7 +61,7 @@ export async function runProcess(
 
 	const handle: ProcessHandle = {
 		respond: async (interactionId: string, resolution: InteractionResolution) => {
-			await child.write(JSON.stringify({ interactionId, resolution }) + "\n");
+			await child.write(`${JSON.stringify({ interactionId, resolution })}\n`);
 		},
 		kill: async () => {
 			await child.kill();

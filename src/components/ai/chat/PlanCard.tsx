@@ -15,7 +15,7 @@ export function PlanCard({ entries }: PlanCardProps) {
 				</span>
 			</div>
 			<ul className="divide-y divide-border">
-				{entries.map((entry, i) => {
+				{entries.map((entry) => {
 					const StatusIcon =
 						entry.status === "completed"
 							? CheckCircle2
@@ -31,7 +31,7 @@ export function PlanCard({ entries }: PlanCardProps) {
 								: "text-muted-foreground";
 
 					return (
-						<li key={`${entry.title}-${i}`} className="flex items-start gap-2.5 px-3 py-2">
+						<li key={entry.title} className="flex items-start gap-2.5 px-3 py-2">
 							<StatusIcon
 								className={cn(
 									"size-3.5 mt-0.5 shrink-0",
