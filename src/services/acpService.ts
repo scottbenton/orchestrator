@@ -535,7 +535,6 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 // leaving the OSC payload (e.g. "11;?") behind.
 // The OSC terminator (BEL or ESC\) is made optional to handle unterminated queries
 // such as ESC]11;? (terminal background-color query) that have no response in a headless PTY.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence pattern
 const ANSI_ESCAPE_RE =
 	/[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
 
