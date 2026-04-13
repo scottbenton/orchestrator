@@ -531,8 +531,8 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 // leaving the OSC payload (e.g. "11;?") behind.
 // The OSC terminator (BEL or ESC\) is made optional to handle unterminated queries
 // such as ESC]11;? (terminal background-color query) that have no response in a headless PTY.
-const ANSI_ESCAPE_RE =
-	/[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence pattern
+const ANSI_ESCAPE_RE = /[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_ESCAPE_RE, "");
@@ -548,7 +548,7 @@ function mapToolStatus(status: string | undefined): ToolCallStatus {
 // Extract models/modes from session responses
 // ---------------------------------------------------------------------------
 
-type SessionResponse = { models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { currentModeId?: string; availableModes?: Array<{ id: string; name: string }> } | null } | undefined | void;
+type SessionResponse = { models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { currentModeId?: string; availableModes?: Array<{ id: string; name: string }> } | null } | undefined;
 
 function extractCurrentModelId(response: SessionResponse): string {
 	return (response as { models?: { currentModelId?: string } | null } | null)?.models?.currentModelId ?? "";

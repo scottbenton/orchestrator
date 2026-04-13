@@ -16,6 +16,7 @@ interface ChatViewProps {
 export function ChatView({ messages, isRunning, resolvePermission }: ChatViewProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: deps are needed to trigger scroll on new messages and state changes
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages, isRunning]);
@@ -37,7 +38,8 @@ export function ChatView({ messages, isRunning, resolvePermission }: ChatViewPro
 			{messages.map((msg, i) => {
 				switch (msg.type) {
 					case "user":
-						return <UserMessage key={i} text={msg.text} />;
+						// biome-ignore lint/suspicious/noArrayIndexKey: user messages have no stable id
+				return <UserMessage key={i} text={msg.text} />;
 
 					case "assistant":
 						return <AssistantMessage key={msg.id} chunks={msg.chunks} streaming={msg.streaming} />;
@@ -66,6 +68,8 @@ export function ChatView({ messages, isRunning, resolvePermission }: ChatViewPro
 								onResolve={(optionId) => resolvePermission(msg.id, optionId)}
 							/>
 						);
+					default:
+						return null;
 				}
 			})}
 
