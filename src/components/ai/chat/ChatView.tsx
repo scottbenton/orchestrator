@@ -15,10 +15,20 @@ interface ChatViewProps {
 
 export function ChatView({ messages, isRunning, resolvePermission }: ChatViewProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: deps are needed to trigger scroll on new messages and state changes
 	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+		if (!scrollContainerRef.current || !bottomRef.current) return;
+
+		const container = scrollContainerRef.current;
+		const isNearBottom =
+			container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+		// Only auto-scroll if user is already near the bottom
+		if (isNearBottom) {
+			bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+		}
 	}, [messages, isRunning]);
 
 	const lastMessage = messages[messages.length - 1];
@@ -28,7 +38,7 @@ export function ChatView({ messages, isRunning, resolvePermission }: ChatViewPro
 		!(lastMessage?.type === "permission_request" && !lastMessage.resolved);
 
 	return (
-		<div className="flex-1 min-h-0 overflow-y-auto py-4">
+		<div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto py-4">
 			{messages.length === 0 && !isRunning && (
 				<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
 					Start a conversation
@@ -39,7 +49,7 @@ export function ChatView({ messages, isRunning, resolvePermission }: ChatViewPro
 				switch (msg.type) {
 					case "user":
 						// biome-ignore lint/suspicious/noArrayIndexKey: user messages have no stable id
-				return <UserMessage key={i} text={msg.text} />;
+						return <UserMessage key={i} text={msg.text} />;
 
 					case "assistant":
 						return <AssistantMessage key={msg.id} chunks={msg.chunks} streaming={msg.streaming} />;

@@ -286,11 +286,7 @@ async function spawnAndConnect(
 							toolTitle,
 							options: params.options.map((o) => ({
 								optionId: o.optionId,
-								kind: o.kind as
-									| "allow_once"
-									| "allow_always"
-									| "reject_once"
-									| "reject_always",
+								kind: o.kind as "allow_once" | "allow_always" | "reject_once" | "reject_always",
 								name: o.name,
 							})),
 						},
@@ -352,13 +348,21 @@ async function spawnAndConnect(
 
 				// If already closed, return accumulated output immediately.
 				if (buf.closed) {
-					return { output: stripAnsi(buf.chunks.join("")), truncated: false, exitStatus: { exitCode: 0 } };
+					return {
+						output: stripAnsi(buf.chunks.join("")),
+						truncated: false,
+						exitStatus: { exitCode: 0 },
+					};
 				}
 
 				// Otherwise wait for close.
 				return new Promise((resolve) => {
 					buf.closeResolvers.push(() => {
-						resolve({ output: stripAnsi(buf.chunks.join("")), truncated: false, exitStatus: { exitCode: 0 } });
+						resolve({
+							output: stripAnsi(buf.chunks.join("")),
+							truncated: false,
+							exitStatus: { exitCode: 0 },
+						});
 					});
 				});
 			},
@@ -532,7 +536,8 @@ function notificationToEvents(notification: SessionNotification): AgentEventKind
 // The OSC terminator (BEL or ESC\) is made optional to handle unterminated queries
 // such as ESC]11;? (terminal background-color query) that have no response in a headless PTY.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence pattern
-const ANSI_ESCAPE_RE = /[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
+const ANSI_ESCAPE_RE =
+	/[\x1b\x9b](?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])/g;
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_ESCAPE_RE, "");
@@ -548,20 +553,46 @@ function mapToolStatus(status: string | undefined): ToolCallStatus {
 // Extract models/modes from session responses
 // ---------------------------------------------------------------------------
 
-type SessionResponse = { models?: { currentModelId?: string; availableModels?: Array<{ modelId: string; name: string }> } | null; modes?: { currentModeId?: string; availableModes?: Array<{ id: string; name: string }> } | null } | undefined;
+type SessionResponse =
+	| {
+			models?: {
+				currentModelId?: string;
+				availableModels?: Array<{ modelId: string; name: string }>;
+			} | null;
+			modes?: {
+				currentModeId?: string;
+				availableModes?: Array<{ id: string; name: string }>;
+			} | null;
+	  }
+	| undefined;
 
 function extractCurrentModelId(response: SessionResponse): string {
-	return (response as { models?: { currentModelId?: string } | null } | null)?.models?.currentModelId ?? "";
+	return (
+		(response as { models?: { currentModelId?: string } | null } | null)?.models?.currentModelId ??
+		""
+	);
 }
 
 function extractCurrentModeId(response: SessionResponse): string {
-	return (response as { modes?: { currentModeId?: string } | null } | null)?.modes?.currentModeId ?? "";
+	return (
+		(response as { modes?: { currentModeId?: string } | null } | null)?.modes?.currentModeId ?? ""
+	);
 }
 
 function extractModels(response: SessionResponse): AgentModelInfo[] {
-	return (response as { models?: { availableModels?: Array<{ modelId: string; name: string }> } | null } | null)?.models?.availableModels?.map((m) => ({ modelId: m.modelId, name: m.name })) ?? [];
+	return (
+		(
+			response as {
+				models?: { availableModels?: Array<{ modelId: string; name: string }> } | null;
+			} | null
+		)?.models?.availableModels?.map((m) => ({ modelId: m.modelId, name: m.name })) ?? []
+	);
 }
 
 function extractModes(response: SessionResponse): AgentModeInfo[] {
-	return (response as { modes?: { availableModes?: Array<{ id: string; name: string }> } | null } | null)?.modes?.availableModes?.map((m) => ({ id: m.id, name: m.name })) ?? [];
+	return (
+		(
+			response as { modes?: { availableModes?: Array<{ id: string; name: string }> } | null } | null
+		)?.modes?.availableModes?.map((m) => ({ id: m.id, name: m.name })) ?? []
+	);
 }

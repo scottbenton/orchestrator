@@ -7,6 +7,7 @@ import { useWorkspaceSettings } from "@/hooks/api/useWorkspaceSettings";
 import { useAcpSession } from "@/hooks/useAcpSession";
 import { getAgentDefinition } from "@/lib/agents";
 import { type PersistedTab, useTabsStore } from "@/store/tabsStore";
+
 // ---------------------------------------------------------------------------
 // Single-tab ACP chat panel
 // ---------------------------------------------------------------------------
@@ -33,7 +34,17 @@ function AcpTab({
 	const modelInitialized = useRef(false);
 	const modeInitialized = useRef(false);
 
-	const { messages, isRunning, send, stop, resolvePermission, currentModelId, currentModeId, availableModels, availableModes } = useAcpSession({
+	const {
+		messages,
+		isRunning,
+		send,
+		stop,
+		resolvePermission,
+		currentModelId,
+		currentModeId,
+		availableModels,
+		availableModes,
+	} = useAcpSession({
 		existingSessionId: tab.acpSessionId,
 		cwd: tab.cwd,
 		acpCommand,
