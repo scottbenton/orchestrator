@@ -24,6 +24,9 @@
 			},
 			"style": {
 				"noNonNullAssertion": "warn"
+			},
+			"suspicious": {
+				"noControlCharactersInRegex": "off"
 			}
 		}
 	},
