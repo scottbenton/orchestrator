@@ -8,7 +8,12 @@ const mockExists = mock((_path: string) => Promise.resolve(false));
 const mockReadTextFile = mock((_path: string) => Promise.resolve(""));
 const mockWriteTextFile = mock((_path: string, _content: string) => Promise.resolve());
 const mockMkdir = mock((_path: string, _options?: { recursive?: boolean }) => Promise.resolve());
-const mockReadDir = mock((_path: string) => Promise.resolve([]));
+interface DirEntry {
+	name: string;
+	isFile: boolean;
+	isDirectory: boolean;
+}
+const mockReadDir = mock((_path: string): Promise<DirEntry[]> => Promise.resolve([]));
 
 mock.module("@/lib/fs", () => ({
 	exists: mockExists,
@@ -33,7 +38,7 @@ beforeEach(() => {
 	mockReadTextFile.mockImplementation(() => Promise.resolve(""));
 	mockWriteTextFile.mockImplementation(() => Promise.resolve());
 	mockMkdir.mockImplementation(() => Promise.resolve());
-	mockReadDir.mockImplementation(() => Promise.resolve([]));
+	mockReadDir.mockImplementation((): Promise<DirEntry[]> => Promise.resolve([]));
 });
 
 // ---------------------------------------------------------------------------

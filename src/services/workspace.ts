@@ -63,7 +63,7 @@ export async function detectLanguage(repoPath: string): Promise<string> {
 			}
 		} catch (_error) {
 			// Silently skip directories we can't read
-			console.warn(`Could not read directory ${dirPath}:`, error);
+			console.warn(`Could not read directory ${dirPath}:`, _error);
 		}
 	}
 
@@ -169,7 +169,7 @@ async function loadMemoryFile(path: string): Promise<string | null> {
 		const content = await readTextFile(path);
 		return content.trim();
 	} catch (_error) {
-		console.warn(`Could not load memory file ${path}:`, error);
+		console.warn(`Could not load memory file ${path}:`, _error);
 		return null;
 	}
 }
