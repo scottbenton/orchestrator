@@ -12,6 +12,9 @@ const mockExecute = mock(async (_sql: string, params: unknown[]) => {
 });
 const mockSelect = mock(async <T>() => selectRows as T);
 
+// Clear any module mocks leaked from other test files (Bun ≥1.3.12 regression)
+mock.restore();
+
 mock.module("@/lib/db", () => ({
 	getDb: mock(() =>
 		Promise.resolve({
