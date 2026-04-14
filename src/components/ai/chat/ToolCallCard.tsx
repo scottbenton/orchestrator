@@ -10,7 +10,7 @@ interface ToolCallCardProps {
 }
 
 export function ToolCallCard({ title, status, output }: ToolCallCardProps) {
-	const [expanded, setExpanded] = useState(status !== "completed");
+	const [expanded, setExpanded] = useState(false);
 
 	const StatusIcon =
 		status === "completed" ? CheckCircle2 : status === "in_progress" ? Loader2 : Clock;
