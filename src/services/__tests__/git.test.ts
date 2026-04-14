@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 // ---------------------------------------------------------------------------
 // Mock dependencies
@@ -48,10 +48,6 @@ beforeEach(() => {
 	mockSpawn.mockClear();
 	mockRunProcess.mockClear();
 	mockEmitSystemLog.mockClear();
-});
-
-afterAll(() => {
-	mock.restore();
 });
 
 // ---------------------------------------------------------------------------
