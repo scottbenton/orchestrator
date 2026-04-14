@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "test:services": "bun test src/services/__tests__/logStreamService.test.ts && bun test src/store/ src/lib/ src/services/__tests__/configService.test.ts src/services/__tests__/git.test.ts src/services/__tests__/workspaceListService.test.ts",
+    "test:services": "bun test src/services/ src/store/ src/lib/",
     "test:ui": "bun test src/components/ src/pages/",
     "test": "bun run test:services && bun run test:ui",
     "lint": "biome lint ./src",

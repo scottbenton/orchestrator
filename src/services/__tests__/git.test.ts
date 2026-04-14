@@ -1,26 +1,53 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 // ---------------------------------------------------------------------------
-// Mock dependencies
+// Mock dependencies at the external boundary only.
+// We do NOT mock ../logStreamService — that would cause mock.module leaks
+// into logStreamService.test.ts. Instead we mock the two external layers that
+// logStreamService itself depends on so the real functions run through.
 // ---------------------------------------------------------------------------
 
-const mockExecute = mock();
-const mockSpawn = mock();
-const mockRunProcess = mock();
-const mockEmitSystemLog = mock();
+// For Command.execute() — used directly by getDiffStat / getCommitMessages
+const mockCmdExecute = mock();
+
+// Exit codes to return from successive runProcess() calls (via spawn)
+const spawnExitCodes: number[] = [];
+
+// Factory so each Command.create() call gets its own close-handler closure
+const mockCreateCommand = mock(() => {
+	let onClose: ((data: { code: number }) => void) | null = null;
+	return {
+		execute: mockCmdExecute,
+		stdout: { on: mock() },
+		stderr: { on: mock() },
+		on: mock((event: string, handler: (data: unknown) => void) => {
+			if (event === "close") {
+				onClose = handler as (data: { code: number }) => void;
+			}
+		}),
+		// Fires the close handler synchronously so done promises resolve immediately
+		spawn: mock(async () => {
+			const code = spawnExitCodes.shift() ?? 0;
+			onClose?.({ code });
+			return { write: mock(), kill: mock() };
+		}),
+	};
+});
 
 mock.module("@tauri-apps/plugin-shell", () => ({
-	Command: {
-		create: mock((_program: string, _args: string[]) => ({
-			execute: mockExecute,
-			spawn: mockSpawn,
-		})),
-	},
+	Command: { create: mockCreateCommand },
 }));
 
-mock.module("../logStreamService", () => ({
-	runProcess: mockRunProcess,
-	emitSystemLog: mockEmitSystemLog,
+// emitSystemLog writes one row per call — track via db.execute
+const mockDbExecute = mock(async () => {});
+
+mock.module("@/lib/db", () => ({
+	getDb: mock(() =>
+		Promise.resolve({
+			execute: mockDbExecute,
+			select: mock(async () => []),
+		})
+	),
 }));
 
 // ---------------------------------------------------------------------------
@@ -44,10 +71,10 @@ const {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-	mockExecute.mockClear();
-	mockSpawn.mockClear();
-	mockRunProcess.mockClear();
-	mockEmitSystemLog.mockClear();
+	mockCmdExecute.mockClear();
+	mockCreateCommand.mockClear();
+	mockDbExecute.mockClear();
+	spawnExitCodes.length = 0;
 });
 
 // ---------------------------------------------------------------------------
@@ -147,7 +174,7 @@ describe("parseDiffStat", () => {
 
 describe("getDiffStat", () => {
 	test("returns parsed diff stat on success", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: "3 files changed, 45 insertions(+), 12 deletions(-)",
 			stderr: "",
@@ -163,7 +190,7 @@ describe("getDiffStat", () => {
 	});
 
 	test("handles empty diff (no changes)", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: "",
 			stderr: "",
@@ -179,7 +206,7 @@ describe("getDiffStat", () => {
 	});
 
 	test("throws GitError on failure", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 128,
 			stdout: "",
 			stderr: "fatal: not a git repository",
@@ -195,7 +222,7 @@ describe("getDiffStat", () => {
 
 describe("getCommitMessages", () => {
 	test("returns array of commit messages", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: "Fix bug in parser\nAdd new feature\nUpdate documentation",
 			stderr: "",
@@ -207,7 +234,7 @@ describe("getCommitMessages", () => {
 	});
 
 	test("filters out empty lines", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: "First commit\n\n\nSecond commit\n",
 			stderr: "",
@@ -219,7 +246,7 @@ describe("getCommitMessages", () => {
 	});
 
 	test("returns empty array when no commits", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: "",
 			stderr: "",
@@ -231,7 +258,7 @@ describe("getCommitMessages", () => {
 	});
 
 	test("handles commits with special characters", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 0,
 			stdout: 'Fix: "quote" test\nAdd [tag] support\nUse <brackets>',
 			stderr: "",
@@ -243,7 +270,7 @@ describe("getCommitMessages", () => {
 	});
 
 	test("throws GitError on failure", async () => {
-		mockExecute.mockResolvedValue({
+		mockCmdExecute.mockResolvedValue({
 			code: 128,
 			stdout: "",
 			stderr: "fatal: not a git repository",
@@ -259,17 +286,7 @@ describe("getCommitMessages", () => {
 
 describe("createWorktree", () => {
 	test("fetches base branch then creates worktree", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess
-			.mockResolvedValueOnce({
-				handle: {},
-				done: Promise.resolve(0),
-			})
-			.mockResolvedValueOnce({
-				handle: {},
-				done: Promise.resolve(0),
-			});
-
+		spawnExitCodes.push(0, 0); // fetch succeeds, worktree creation succeeds
 		const onLine = mock(() => {});
 
 		await createWorktree({
@@ -281,17 +298,12 @@ describe("createWorktree", () => {
 			onLine,
 		});
 
-		expect(mockRunProcess).toHaveBeenCalledTimes(2);
-		expect(mockEmitSystemLog).toHaveBeenCalledTimes(3); // fetch, create, success
+		expect(mockCreateCommand).toHaveBeenCalledTimes(2); // fetch + worktree add
+		expect(mockDbExecute).toHaveBeenCalledTimes(3); // fetch msg, create msg, success msg
 	});
 
 	test("throws GitError if fetch fails", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess.mockResolvedValueOnce({
-			handle: {},
-			done: Promise.resolve(1), // non-zero exit code
-		});
-
+		spawnExitCodes.push(1);
 		const onLine = mock(() => {});
 
 		await expect(
@@ -307,17 +319,7 @@ describe("createWorktree", () => {
 	});
 
 	test("throws GitError if worktree creation fails", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess
-			.mockResolvedValueOnce({
-				handle: {},
-				done: Promise.resolve(0), // fetch succeeds
-			})
-			.mockResolvedValueOnce({
-				handle: {},
-				done: Promise.resolve(128), // worktree creation fails
-			});
-
+		spawnExitCodes.push(0, 128); // fetch succeeds, worktree creation fails
 		const onLine = mock(() => {});
 
 		await expect(
@@ -339,12 +341,7 @@ describe("createWorktree", () => {
 
 describe("removeWorktree", () => {
 	test("removes worktree successfully", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess.mockResolvedValueOnce({
-			handle: {},
-			done: Promise.resolve(0),
-		});
-
+		spawnExitCodes.push(0);
 		const onLine = mock(() => {});
 
 		await removeWorktree({
@@ -354,17 +351,12 @@ describe("removeWorktree", () => {
 			onLine,
 		});
 
-		expect(mockRunProcess).toHaveBeenCalledTimes(1);
-		expect(mockEmitSystemLog).toHaveBeenCalledTimes(2); // removing, success
+		expect(mockCreateCommand).toHaveBeenCalledTimes(1);
+		expect(mockDbExecute).toHaveBeenCalledTimes(2); // removing msg, success msg
 	});
 
 	test("does not throw on failure (graceful handling)", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess.mockResolvedValueOnce({
-			handle: {},
-			done: Promise.resolve(1), // non-zero exit code
-		});
-
+		spawnExitCodes.push(1);
 		const onLine = mock(() => {});
 
 		await removeWorktree({
@@ -374,7 +366,7 @@ describe("removeWorktree", () => {
 			onLine,
 		});
 
-		expect(mockEmitSystemLog).toHaveBeenCalledTimes(2); // removing, failure message
+		expect(mockDbExecute).toHaveBeenCalledTimes(2); // removing msg, failure msg
 	});
 });
 
@@ -384,12 +376,7 @@ describe("removeWorktree", () => {
 
 describe("pushBranch", () => {
 	test("pushes branch successfully", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess.mockResolvedValueOnce({
-			handle: {},
-			done: Promise.resolve(0),
-		});
-
+		spawnExitCodes.push(0);
 		const onLine = mock(() => {});
 
 		await pushBranch({
@@ -400,17 +387,12 @@ describe("pushBranch", () => {
 			onLine,
 		});
 
-		expect(mockRunProcess).toHaveBeenCalledTimes(1);
-		expect(mockEmitSystemLog).toHaveBeenCalledTimes(2); // pushing, success
+		expect(mockCreateCommand).toHaveBeenCalledTimes(1);
+		expect(mockDbExecute).toHaveBeenCalledTimes(2); // pushing msg, success msg
 	});
 
 	test("throws GitError on push failure", async () => {
-		mockEmitSystemLog.mockResolvedValue(undefined);
-		mockRunProcess.mockResolvedValueOnce({
-			handle: {},
-			done: Promise.resolve(1),
-		});
-
+		spawnExitCodes.push(1);
 		const onLine = mock(() => {});
 
 		await expect(
