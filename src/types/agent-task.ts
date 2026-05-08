@@ -27,7 +27,6 @@ export interface AgentTask {
 	worktreePath?: string;
 	status: TaskStatus;
 	plan?: string[];
-	planQuestions?: string[];
 	acpSessionId?: string;
 	prUrl?: string;
 	headSha?: string;

@@ -169,11 +169,10 @@ PLAN:
 		}
 
 		const fullResponse = responseChunks.join("");
-		const { plan, planQuestions } = parsePlanResponse(fullResponse);
+		const plan = parsePlanResponse(fullResponse);
 
 		await updateAgentTask(taskId, {
 			plan,
-			planQuestions,
 			status: "awaiting_review",
 		});
 
@@ -215,42 +214,25 @@ export async function dismissTask(taskId: string): Promise<void> {
 // Plan response parser
 // ---------------------------------------------------------------------------
 
-function parsePlanResponse(response: string): {
-	plan: string[];
-	planQuestions: string[];
-} {
-	const planQuestions: string[] = [];
+function parsePlanResponse(response: string): string[] {
 	const plan: string[] = [];
 
-	// Extract QUESTIONS section (optional)
-	const questionsMatch = response.match(/QUESTIONS:\s*\n([\s\S]*?)(?=\nPLAN:|\n#|$)/i);
-	if (questionsMatch) {
-		const lines = questionsMatch[1].split("\n");
-		for (const line of lines) {
-			const trimmed = line.replace(/^[-*]\s*/, "").trim();
-			if (trimmed) planQuestions.push(trimmed);
-		}
-	}
-
 	// Extract PLAN section
-	const planMatch = response.match(/PLAN:\s*\n([\s\S]*?)(?=\nQUESTIONS:|\n#|$)/i);
+	const planMatch = response.match(/PLAN:\s*\n([\s\S]*?)(?=\n#|$)/i);
 	if (planMatch) {
-		const lines = planMatch[1].split("\n");
-		for (const line of lines) {
-			// Match numbered steps: "1. ...", "1) ..."
+		for (const line of planMatch[1].split("\n")) {
 			const trimmed = line.replace(/^\d+[.)]\s*/, "").trim();
 			if (trimmed) plan.push(trimmed);
 		}
 	}
 
-	// Lenient fallback: if no PLAN section found, treat numbered lines as steps
+	// Lenient fallback: treat any numbered lines as steps
 	if (plan.length === 0) {
-		const lines = response.split("\n");
-		for (const line of lines) {
+		for (const line of response.split("\n")) {
 			const match = line.match(/^\s*\d+[.)]\s+(.+)/);
 			if (match) plan.push(match[1].trim());
 		}
 	}
 
-	return { plan, planQuestions };
+	return plan;
 }

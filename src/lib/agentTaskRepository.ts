@@ -21,7 +21,6 @@ interface AgentTaskRow {
 	worktree_path: string | null;
 	status: string;
 	plan: string | null;
-	plan_questions: string | null;
 	acp_session_id: string | null;
 	pr_url: string | null;
 	head_sha: string | null;
@@ -48,9 +47,6 @@ function rowToTask(row: AgentTaskRow): AgentTask {
 		worktreePath: row.worktree_path ?? undefined,
 		status: row.status as TaskStatus,
 		plan: row.plan ? (JSON.parse(row.plan) as string[]) : undefined,
-		planQuestions: row.plan_questions
-			? (JSON.parse(row.plan_questions) as string[])
-			: undefined,
 		acpSessionId: row.acp_session_id ?? undefined,
 		prUrl: row.pr_url ?? undefined,
 		headSha: row.head_sha ?? undefined,
@@ -77,13 +73,13 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 			id, task_type, parent_task_id, title, description,
 			source_url, source_provider, workspace_path, repo_path,
 			owner, repo, branch_name, worktree_path, status,
-			plan, plan_questions, acp_session_id,
+			plan, acp_session_id,
 			pr_url, head_sha, error, archived_at, created_at, updated_at
 		) VALUES (
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?,
+			?, ?,
 			?, ?, ?, ?, ?, ?
 		)`,
 		[
@@ -102,7 +98,6 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 			input.worktreePath ?? null,
 			input.status,
 			input.plan ? JSON.stringify(input.plan) : null,
-			input.planQuestions ? JSON.stringify(input.planQuestions) : null,
 			input.acpSessionId ?? null,
 			input.prUrl ?? null,
 			input.headSha ?? null,
@@ -157,7 +152,6 @@ export async function updateAgentTask(
 			worktree_path    = COALESCE(?, worktree_path),
 			status           = COALESCE(?, status),
 			plan             = COALESCE(?, plan),
-			plan_questions   = COALESCE(?, plan_questions),
 			acp_session_id   = COALESCE(?, acp_session_id),
 			pr_url           = COALESCE(?, pr_url),
 			head_sha         = COALESCE(?, head_sha),
@@ -178,7 +172,6 @@ export async function updateAgentTask(
 			updates.worktreePath ?? null,
 			updates.status ?? null,
 			updates.plan !== undefined ? JSON.stringify(updates.plan) : null,
-			updates.planQuestions !== undefined ? JSON.stringify(updates.planQuestions) : null,
 			updates.acpSessionId ?? null,
 			updates.prUrl ?? null,
 			updates.headSha ?? null,

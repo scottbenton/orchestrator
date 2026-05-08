@@ -65,7 +65,6 @@ const MIGRATIONS: Array<(db: Database) => Promise<void>> = [
 				worktree_path    TEXT,
 				status           TEXT NOT NULL DEFAULT 'pending',
 				plan             TEXT,
-				plan_questions   TEXT,
 				acp_session_id   TEXT,
 				pr_url           TEXT,
 				head_sha         TEXT,
