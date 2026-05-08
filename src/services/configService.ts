@@ -172,6 +172,7 @@ export async function getResolvedConfig(
 		name: workspace.name,
 		ai_backend: workspace.ai_backend,
 		editor: workspace.editor,
+		plan_review: workspace.plan_review ?? true,
 	};
 
 	if (owner && repo) {
