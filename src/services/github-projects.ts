@@ -1,7 +1,14 @@
 import type { RepoSettings } from "@/types/config";
 import type { Task } from "@/types/task";
-import { getGitHubToken } from "@/services/github-auth";
 import type { TicketSource } from "@/services/ticket-source";
+
+// Lazy import so loading this module does not pull in github-auth (and its
+// LazyStore singleton) until the first real token lookup. Tests always inject
+// a getToken function so this path is never exercised in the test suite.
+async function defaultGetToken(): Promise<string | null> {
+	const { getGitHubToken } = await import("@/services/github-auth");
+	return getGitHubToken();
+}
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -208,8 +215,8 @@ export class GitHubProjectsSource implements TicketSource {
 	} | null = null;
 	private readonly _getToken: () => Promise<string | null>;
 
-	constructor(getToken?: () => Promise<string | null>) {
-		this._getToken = getToken ?? getGitHubToken;
+	constructor(getToken: () => Promise<string | null> = defaultGetToken) {
+		this._getToken = getToken;
 	}
 
 	async fetchTasks(repoSettings: RepoSettings): Promise<Task[]> {
