@@ -14,6 +14,7 @@ export const WorkspaceSettingsSchema = z.object({
 	name: z.string().min(1),
 	ai_backend: z.enum(AI_BACKENDS),
 	editor: z.enum(EDITORS).optional(),
+	plan_review: z.boolean().optional(),
 });
 
 export type WorkspaceSettings = z.infer<typeof WorkspaceSettingsSchema>;
@@ -21,6 +22,7 @@ export type WorkspaceSettings = z.infer<typeof WorkspaceSettingsSchema>;
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
 	name: "my workspace",
 	ai_backend: "claude-code",
+	plan_review: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -47,6 +49,7 @@ export type ResolvedConfig = {
 	name: string;
 	ai_backend: AIBackend;
 	editor?: Editor;
+	plan_review: boolean;
 };
 
 // ---------------------------------------------------------------------------
