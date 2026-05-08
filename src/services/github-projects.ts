@@ -33,75 +33,45 @@ export class GitHubNetworkError extends Error {
 // ---------------------------------------------------------------------------
 
 const PROJECT_ITEMS_QUERY = `
-  query($owner: String!, $projectNumber: Int!, $cursor: String) {
-    repositoryOwner(login: $owner) {
-      ... on Organization {
-        projectV2(number: $projectNumber) {
-          id
-          items(first: 50, after: $cursor) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              id
-              content {
-                __typename
-                ... on Issue {
-                  number title body url state
-                  labels(first: 20) { nodes { name } }
-                  milestone { number title }
-                }
-              }
-            }
-          }
-        }
-      }
-      ... on User {
-        projectV2(number: $projectNumber) {
-          id
-          items(first: 50, after: $cursor) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              id
-              content {
-                __typename
-                ... on Issue {
-                  number title body url state
-                  labels(first: 20) { nodes { name } }
-                  milestone { number title }
-                }
-              }
-            }
+  fragment ProjectItems on ProjectV2 {
+    id
+    items(first: 50, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id
+        content {
+          __typename
+          ... on Issue {
+            number title body url state
+            labels(first: 20) { nodes { name } }
+            milestone { number title }
           }
         }
       }
     }
   }
+  query($owner: String!, $projectNumber: Int!, $cursor: String) {
+    repositoryOwner(login: $owner) {
+      ... on Organization { projectV2(number: $projectNumber) { ...ProjectItems } }
+      ... on User         { projectV2(number: $projectNumber) { ...ProjectItems } }
+    }
+  }
 `;
 
 const STATUS_FIELD_QUERY = `
+  fragment ProjectStatusField on ProjectV2 {
+    id
+    field(name: "Status") {
+      ... on ProjectV2SingleSelectField {
+        id
+        options { id name }
+      }
+    }
+  }
   query($owner: String!, $projectNumber: Int!) {
     repositoryOwner(login: $owner) {
-      ... on Organization {
-        projectV2(number: $projectNumber) {
-          id
-          field(name: "Status") {
-            ... on ProjectV2SingleSelectField {
-              id
-              options { id name }
-            }
-          }
-        }
-      }
-      ... on User {
-        projectV2(number: $projectNumber) {
-          id
-          field(name: "Status") {
-            ... on ProjectV2SingleSelectField {
-              id
-              options { id name }
-            }
-          }
-        }
-      }
+      ... on Organization { projectV2(number: $projectNumber) { ...ProjectStatusField } }
+      ... on User         { projectV2(number: $projectNumber) { ...ProjectStatusField } }
     }
   }
 `;
