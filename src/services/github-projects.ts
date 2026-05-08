@@ -34,38 +34,40 @@ export class GitHubNetworkError extends Error {
 
 const PROJECT_ITEMS_QUERY = `
   query($owner: String!, $projectNumber: Int!, $cursor: String) {
-    organization(login: $owner) {
-      projectV2(number: $projectNumber) {
-        id
-        items(first: 50, after: $cursor) {
-          pageInfo { hasNextPage endCursor }
-          nodes {
-            id
-            content {
-              __typename
-              ... on Issue {
-                number title body url state
-                labels(first: 20) { nodes { name } }
-                milestone { number title }
+    repositoryOwner(login: $owner) {
+      ... on Organization {
+        projectV2(number: $projectNumber) {
+          id
+          items(first: 50, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              id
+              content {
+                __typename
+                ... on Issue {
+                  number title body url state
+                  labels(first: 20) { nodes { name } }
+                  milestone { number title }
+                }
               }
             }
           }
         }
       }
-    }
-    user(login: $owner) {
-      projectV2(number: $projectNumber) {
-        id
-        items(first: 50, after: $cursor) {
-          pageInfo { hasNextPage endCursor }
-          nodes {
-            id
-            content {
-              __typename
-              ... on Issue {
-                number title body url state
-                labels(first: 20) { nodes { name } }
-                milestone { number title }
+      ... on User {
+        projectV2(number: $projectNumber) {
+          id
+          items(first: 50, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              id
+              content {
+                __typename
+                ... on Issue {
+                  number title body url state
+                  labels(first: 20) { nodes { name } }
+                  milestone { number title }
+                }
               }
             }
           }
@@ -77,24 +79,26 @@ const PROJECT_ITEMS_QUERY = `
 
 const STATUS_FIELD_QUERY = `
   query($owner: String!, $projectNumber: Int!) {
-    organization(login: $owner) {
-      projectV2(number: $projectNumber) {
-        id
-        field(name: "Status") {
-          ... on ProjectV2SingleSelectField {
-            id
-            options { id name }
+    repositoryOwner(login: $owner) {
+      ... on Organization {
+        projectV2(number: $projectNumber) {
+          id
+          field(name: "Status") {
+            ... on ProjectV2SingleSelectField {
+              id
+              options { id name }
+            }
           }
         }
       }
-    }
-    user(login: $owner) {
-      projectV2(number: $projectNumber) {
-        id
-        field(name: "Status") {
-          ... on ProjectV2SingleSelectField {
-            id
-            options { id name }
+      ... on User {
+        projectV2(number: $projectNumber) {
+          id
+          field(name: "Status") {
+            ... on ProjectV2SingleSelectField {
+              id
+              options { id name }
+            }
           }
         }
       }
@@ -151,15 +155,8 @@ function extractProject(
 	projectNumber: number,
 ): Record<string, unknown> {
 	const d = data.data as Record<string, unknown> | undefined;
-	const org = (d?.organization as Record<string, unknown> | null)?.projectV2 as
-		| Record<string, unknown>
-		| null
-		| undefined;
-	const usr = (d?.user as Record<string, unknown> | null)?.projectV2 as
-		| Record<string, unknown>
-		| null
-		| undefined;
-	const project = org ?? usr;
+	const repoOwner = d?.repositoryOwner as Record<string, unknown> | null | undefined;
+	const project = (repoOwner?.projectV2 as Record<string, unknown> | null | undefined) ?? null;
 	if (!project) {
 		throw new Error(`GitHub project #${projectNumber} not found for ${owner}`);
 	}

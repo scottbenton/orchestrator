@@ -75,17 +75,17 @@ function makePageResponse(
 	hasNextPage = false,
 	endCursor = "cursor_end",
 ): Record<string, unknown> {
-	const projectData = {
-		id: "project_id_001",
-		items: {
-			pageInfo: { hasNextPage, endCursor },
-			nodes,
-		},
-	};
 	return {
 		data: {
-			organization: { projectV2: projectData },
-			user: null,
+			repositoryOwner: {
+				projectV2: {
+					id: "project_id_001",
+					items: {
+						pageInfo: { hasNextPage, endCursor },
+						nodes,
+					},
+				},
+			},
 		},
 	};
 }
@@ -95,7 +95,7 @@ function makeStatusFieldResponse(
 ): Record<string, unknown> {
 	return {
 		data: {
-			organization: {
+			repositoryOwner: {
 				projectV2: {
 					id: "project_id_001",
 					field: {
@@ -104,7 +104,6 @@ function makeStatusFieldResponse(
 					},
 				},
 			},
-			user: null,
 		},
 	};
 }
@@ -301,7 +300,7 @@ test("fetchTasks throws GitHubAuthError on 401", async () => {
 
 test("fetchTasks throws readable error on GraphQL project-not-found", async () => {
 	setToken("ghp_token");
-	mockFetch([{ data: { organization: null, user: null } }]);
+	mockFetch([{ data: { repositoryOwner: null } }]);
 
 	const source = new GitHubProjectsSource(getToken);
 	await expect(source.fetchTasks(BASE_REPO_SETTINGS)).rejects.toThrow(
@@ -383,8 +382,7 @@ test("transitionTask throws descriptively if no Status field", async () => {
 	mockFetch([
 		{
 			data: {
-				organization: { projectV2: { id: "project_id_001", field: null } },
-				user: null,
+				repositoryOwner: { projectV2: { id: "project_id_001", field: null } },
 			},
 		},
 	]);
