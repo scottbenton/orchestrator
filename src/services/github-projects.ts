@@ -206,11 +206,16 @@ export class GitHubProjectsSource implements TicketSource {
 		fieldId: string;
 		options: Map<string, string>;
 	} | null = null;
+	private readonly _getToken: () => Promise<string | null>;
+
+	constructor(getToken?: () => Promise<string | null>) {
+		this._getToken = getToken ?? getGitHubToken;
+	}
 
 	async fetchTasks(repoSettings: RepoSettings): Promise<Task[]> {
 		if (!repoSettings.github_project_number) return [];
 
-		const token = await getGitHubToken();
+		const token = await this._getToken();
 		if (!token) return [];
 
 		const [owner] = repoSettings.repo.split("/");
@@ -254,7 +259,7 @@ export class GitHubProjectsSource implements TicketSource {
 			throw new Error("fetchTasks must be called before transitionTask");
 		}
 
-		const token = await getGitHubToken();
+		const token = await this._getToken();
 		if (!token) throw new GitHubAuthError("No GitHub token configured");
 
 		if (!this._statusCache) {
