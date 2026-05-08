@@ -32,6 +32,9 @@ export const RepoSettingsSchema = z.object({
 	repo: z.string().regex(/^[^/]+\/[^/]+$/, "Must be in 'owner/repo' format"),
 	ai_backend: z.enum(AI_BACKENDS).optional(),
 	editor: z.enum(EDITORS).optional(),
+	github_project_number: z.number().int().positive().optional(),
+	labels: z.array(z.string()).optional(),
+	auto_grab: z.boolean().optional(),
 });
 
 export type RepoSettings = z.infer<typeof RepoSettingsSchema>;
