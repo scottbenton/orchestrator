@@ -3,9 +3,10 @@ import { getAgentDefinition } from "@/lib/agents";
 import { createAgentTask, getAgentTask, updateAgentTask } from "@/lib/agentTaskRepository";
 import { acpCreateSession } from "@/services/acpService";
 import { getResolvedConfig } from "@/services/configService";
-import { agentBranchName, createWorktree, worktreePath as buildWorktreePath } from "@/services/git";
+import { agentBranchName, createWorktree, detectDefaultBranch, worktreePath as buildWorktreePath } from "@/services/git";
 import { emitSystemLog } from "@/services/logStreamService";
 import { buildSystemPrompt, detectLanguage } from "@/services/workspace";
+import { executeTask } from "@/services/executor";
 import type { TaskType } from "@/types/agent-task";
 import type { Task } from "@/types/task";
 import type { ProcessEvent } from "@/types/logs";
@@ -44,6 +45,7 @@ export async function startTask(
 		owner: workspaceCtx.owner,
 		repo: workspaceCtx.repo,
 		branchName,
+		baseBranch: "main",
 		worktreePath: wPath,
 		status: "pending",
 	});
@@ -80,18 +82,24 @@ export async function generatePlan(
 	};
 
 	try {
+		// Resolve base branch: per-repo config → git detection → "main"
+		const settings = await getResolvedConfig(task.workspacePath, task.owner, task.repo);
+		const baseBranch =
+			settings.default_branch ?? (await detectDefaultBranch(task.repoPath));
+
+		await updateAgentTask(taskId, { baseBranch });
+
 		// Create the worktree
 		await createWorktree({
 			repoPath: task.repoPath,
 			worktreePath,
 			branchName: task.branchName,
-			baseBranch: "main",
+			baseBranch,
 			taskId,
 			onLine: emit,
 		});
 
 		// Build workspace context for the system prompt
-		const settings = await getResolvedConfig(task.workspacePath, task.owner, task.repo);
 		const primaryLanguage = await detectLanguage(task.repoPath);
 
 		const workspaceCtx: WorkspaceContext = {
@@ -197,9 +205,12 @@ export async function approvePlan(taskId: string): Promise<void> {
 	const task = await getAgentTask(taskId);
 	if (!task) throw new Error(`Task ${taskId} not found`);
 
-	await updateAgentTask(taskId, { status: "executing" });
-
-	// TODO: issue #11 — trigger execution here using task.acpSessionId
+	executeTask(taskId).catch(async (err) => {
+		await updateAgentTask(taskId, {
+			status: "failed",
+			error: err instanceof Error ? err.message : String(err),
+		}).catch(console.error);
+	});
 }
 
 // ---------------------------------------------------------------------------

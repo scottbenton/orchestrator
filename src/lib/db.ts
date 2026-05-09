@@ -79,6 +79,13 @@ const MIGRATIONS: Array<(db: Database) => Promise<void>> = [
 		);
 		await db.execute("CREATE INDEX idx_agent_tasks_status ON agent_tasks(status)");
 	},
+
+	// v3 — base branch per task (issue #11)
+	async (db) => {
+		await db.execute(
+			"ALTER TABLE agent_tasks ADD COLUMN base_branch TEXT NOT NULL DEFAULT 'main'"
+		);
+	},
 ];
 
 async function migrate(db: Database): Promise<void> {

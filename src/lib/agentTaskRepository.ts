@@ -18,6 +18,7 @@ interface AgentTaskRow {
 	owner: string;
 	repo: string;
 	branch_name: string;
+	base_branch: string;
 	worktree_path: string | null;
 	status: string;
 	plan: string | null;
@@ -44,6 +45,7 @@ function rowToTask(row: AgentTaskRow): AgentTask {
 		owner: row.owner,
 		repo: row.repo,
 		branchName: row.branch_name,
+		baseBranch: row.base_branch,
 		worktreePath: row.worktree_path ?? undefined,
 		status: row.status as TaskStatus,
 		plan: row.plan ? (JSON.parse(row.plan) as string[]) : undefined,
@@ -72,13 +74,13 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 		`INSERT INTO agent_tasks (
 			id, task_type, parent_task_id, title, description,
 			source_url, source_provider, workspace_path, repo_path,
-			owner, repo, branch_name, worktree_path, status,
+			owner, repo, branch_name, base_branch, worktree_path, status,
 			plan, acp_session_id,
 			pr_url, head_sha, error, archived_at, created_at, updated_at
 		) VALUES (
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
-			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?,
 			?, ?,
 			?, ?, ?, ?, ?, ?
 		)`,
@@ -95,6 +97,7 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 			input.owner,
 			input.repo,
 			input.branchName,
+			input.baseBranch,
 			input.worktreePath ?? null,
 			input.status,
 			input.plan ? JSON.stringify(input.plan) : null,
@@ -149,6 +152,7 @@ export async function updateAgentTask(
 			owner            = COALESCE(?, owner),
 			repo             = COALESCE(?, repo),
 			branch_name      = COALESCE(?, branch_name),
+			base_branch      = COALESCE(?, base_branch),
 			worktree_path    = COALESCE(?, worktree_path),
 			status           = COALESCE(?, status),
 			plan             = COALESCE(?, plan),
@@ -169,6 +173,7 @@ export async function updateAgentTask(
 			updates.owner ?? null,
 			updates.repo ?? null,
 			updates.branchName ?? null,
+			updates.baseBranch ?? null,
 			updates.worktreePath ?? null,
 			updates.status ?? null,
 			updates.plan !== undefined ? JSON.stringify(updates.plan) : null,

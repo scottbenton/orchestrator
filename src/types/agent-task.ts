@@ -24,6 +24,7 @@ export interface AgentTask {
 	owner: string;
 	repo: string;
 	branchName: string;
+	baseBranch: string;
 	worktreePath?: string;
 	status: TaskStatus;
 	plan?: string[];

@@ -184,6 +184,9 @@ export async function getResolvedConfig(
 			if (repoSettings.editor !== undefined) {
 				resolved.editor = repoSettings.editor;
 			}
+			if (repoSettings.default_branch !== undefined) {
+				resolved.default_branch = repoSettings.default_branch;
+			}
 		}
 	}
 

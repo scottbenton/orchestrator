@@ -44,6 +44,21 @@ export function worktreePath(
 }
 
 /**
+ * Detect the default branch of a remote by reading the symbolic ref.
+ * Falls back to "main" if the ref isn't set or the command fails.
+ */
+export async function detectDefaultBranch(repoPath: string): Promise<string> {
+	const cmd = Command.create("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], {
+		cwd: repoPath,
+	});
+	const output = await cmd.execute();
+	if (output.code === 0 && output.stdout.trim()) {
+		return output.stdout.trim().split("/").pop() ?? "main";
+	}
+	return "main";
+}
+
+/**
  * Create a new worktree branched off baseBranch
  */
 export async function createWorktree(opts: {
