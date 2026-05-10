@@ -13,16 +13,19 @@ export type TaskType = "ticket_impl" | "pr_revision" | "manual";
 
 export interface AgentTask {
 	id: string;
+	projectId: string;
 	taskType: TaskType;
 	parentTaskId?: string;
 	title: string;
 	description: string;
 	sourceUrl?: string;
 	sourceProvider?: string;
+	// Denormalized from projects JOIN — read-only on the task
 	workspacePath: string;
 	repoPath: string;
 	owner: string;
 	repo: string;
+	baseBranch: string;
 	branchName: string;
 	worktreePath?: string;
 	status: TaskStatus;

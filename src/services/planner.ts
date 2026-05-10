@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { getAgentDefinition } from "@/lib/agents";
 import { createAgentTask, getAgentTask, updateAgentTask } from "@/lib/agentTaskRepository";
+import { findOrCreateProject } from "@/lib/projectRepository";
 import { acpCreateSession } from "@/services/acpService";
 import { getResolvedConfig } from "@/services/configService";
 import { agentBranchName, createWorktree, worktreePath as buildWorktreePath } from "@/services/git";
@@ -31,18 +32,22 @@ export async function startTask(
 		id
 	);
 
+	const project = await findOrCreateProject(
+		workspaceCtx.workspacePath,
+		workspaceCtx.owner,
+		workspaceCtx.repo,
+		workspaceCtx.repoPath
+	);
+
 	await createAgentTask({
 		id,
+		projectId: project.id,
 		taskType: opts?.taskType ?? "ticket_impl",
 		parentTaskId: opts?.parentTaskId,
 		title: task.title,
 		description: task.description,
 		sourceUrl: task.url,
 		sourceProvider: task.provider,
-		workspacePath: workspaceCtx.workspacePath,
-		repoPath: workspaceCtx.repoPath,
-		owner: workspaceCtx.owner,
-		repo: workspaceCtx.repo,
 		branchName,
 		worktreePath: wPath,
 		status: "pending",
@@ -85,7 +90,7 @@ export async function generatePlan(
 			repoPath: task.repoPath,
 			worktreePath,
 			branchName: task.branchName,
-			baseBranch: "main",
+			baseBranch: task.baseBranch,
 			taskId,
 			onLine: emit,
 		});

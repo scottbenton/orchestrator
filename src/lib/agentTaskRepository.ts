@@ -2,21 +2,18 @@ import { getDb } from "@/lib/db";
 import type { AgentTask, TaskStatus, TaskType } from "@/types/agent-task";
 
 // ---------------------------------------------------------------------------
-// Row shape returned by SQLite selects
+// Row shape returned by SQLite selects (agent_tasks JOIN projects)
 // ---------------------------------------------------------------------------
 
 interface AgentTaskRow {
 	id: string;
+	project_id: string;
 	task_type: string;
 	parent_task_id: string | null;
 	title: string;
 	description: string;
 	source_url: string | null;
 	source_provider: string | null;
-	workspace_path: string;
-	repo_path: string;
-	owner: string;
-	repo: string;
 	branch_name: string;
 	worktree_path: string | null;
 	status: string;
@@ -28,11 +25,30 @@ interface AgentTaskRow {
 	archived_at: string | null;
 	created_at: string;
 	updated_at: string;
+	// From projects JOIN
+	workspace_path: string;
+	owner: string;
+	repo: string;
+	repo_path: string;
+	base_branch: string;
 }
+
+const TASK_JOIN = `
+	SELECT
+		t.id, t.project_id, t.task_type, t.parent_task_id,
+		t.title, t.description, t.source_url, t.source_provider,
+		t.branch_name, t.worktree_path, t.status, t.plan,
+		t.acp_session_id, t.pr_url, t.head_sha, t.error,
+		t.archived_at, t.created_at, t.updated_at,
+		p.workspace_path, p.owner, p.repo, p.repo_path, p.base_branch
+	FROM agent_tasks t
+	JOIN projects p ON p.id = t.project_id
+`;
 
 function rowToTask(row: AgentTaskRow): AgentTask {
 	return {
 		id: row.id,
+		projectId: row.project_id,
 		taskType: row.task_type as TaskType,
 		parentTaskId: row.parent_task_id ?? undefined,
 		title: row.title,
@@ -43,6 +59,7 @@ function rowToTask(row: AgentTaskRow): AgentTask {
 		repoPath: row.repo_path,
 		owner: row.owner,
 		repo: row.repo,
+		baseBranch: row.base_branch,
 		branchName: row.branch_name,
 		worktreePath: row.worktree_path ?? undefined,
 		status: row.status as TaskStatus,
@@ -61,39 +78,51 @@ function rowToTask(row: AgentTaskRow): AgentTask {
 // Public API
 // ---------------------------------------------------------------------------
 
-export type CreateAgentTaskInput = Omit<AgentTask, "createdAt" | "updatedAt">;
+export interface CreateAgentTaskInput {
+	id: string;
+	projectId: string;
+	taskType: TaskType;
+	parentTaskId?: string;
+	title: string;
+	description: string;
+	sourceUrl?: string;
+	sourceProvider?: string;
+	branchName: string;
+	worktreePath?: string;
+	status: TaskStatus;
+	plan?: string[];
+	acpSessionId?: string;
+	prUrl?: string;
+	headSha?: string;
+	error?: string;
+	archivedAt?: string;
+}
 
 export async function createAgentTask(input: CreateAgentTaskInput): Promise<void> {
 	const db = await getDb();
 	const now = new Date().toISOString();
-	const { id } = input;
 
 	await db.execute(
 		`INSERT INTO agent_tasks (
-			id, task_type, parent_task_id, title, description,
-			source_url, source_provider, workspace_path, repo_path,
-			owner, repo, branch_name, worktree_path, status,
-			plan, acp_session_id,
-			pr_url, head_sha, error, archived_at, created_at, updated_at
+			id, project_id, task_type, parent_task_id, title, description,
+			source_url, source_provider, branch_name, worktree_path, status,
+			plan, acp_session_id, pr_url, head_sha, error, archived_at,
+			created_at, updated_at
 		) VALUES (
+			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?, ?,
-			?, ?, ?, ?, ?,
-			?, ?,
-			?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?,
+			?, ?
 		)`,
 		[
-			id,
+			input.id,
+			input.projectId,
 			input.taskType,
 			input.parentTaskId ?? null,
 			input.title,
 			input.description,
 			input.sourceUrl ?? null,
 			input.sourceProvider ?? null,
-			input.workspacePath,
-			input.repoPath,
-			input.owner,
-			input.repo,
 			input.branchName,
 			input.worktreePath ?? null,
 			input.status,
@@ -107,20 +136,32 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 			now,
 		]
 	);
-
 }
 
 export async function getAgentTask(id: string): Promise<AgentTask | null> {
 	const db = await getDb();
 	const rows = await db.select<AgentTaskRow[]>(
-		"SELECT * FROM agent_tasks WHERE id = ?",
+		`${TASK_JOIN} WHERE t.id = ?`,
 		[id]
 	);
 	return rows[0] ? rowToTask(rows[0]) : null;
 }
 
 export type UpdateAgentTaskInput = Partial<
-	Omit<AgentTask, "id" | "taskType" | "parentTaskId" | "createdAt" | "updatedAt">
+	Omit<
+		AgentTask,
+		| "id"
+		| "projectId"
+		| "taskType"
+		| "parentTaskId"
+		| "workspacePath"
+		| "repoPath"
+		| "owner"
+		| "repo"
+		| "baseBranch"
+		| "createdAt"
+		| "updatedAt"
+	>
 >;
 
 export async function updateAgentTask(
@@ -140,34 +181,26 @@ export async function updateAgentTask(
 
 	await db.execute(
 		`UPDATE agent_tasks SET
-			title            = COALESCE(?, title),
-			description      = COALESCE(?, description),
-			source_url       = COALESCE(?, source_url),
-			source_provider  = COALESCE(?, source_provider),
-			workspace_path   = COALESCE(?, workspace_path),
-			repo_path        = COALESCE(?, repo_path),
-			owner            = COALESCE(?, owner),
-			repo             = COALESCE(?, repo),
-			branch_name      = COALESCE(?, branch_name),
-			worktree_path    = COALESCE(?, worktree_path),
-			status           = COALESCE(?, status),
-			plan             = COALESCE(?, plan),
-			acp_session_id   = COALESCE(?, acp_session_id),
-			pr_url           = COALESCE(?, pr_url),
-			head_sha         = COALESCE(?, head_sha),
-			error            = COALESCE(?, error),
-			archived_at      = COALESCE(?, archived_at),
-			updated_at       = ?
+			title          = COALESCE(?, title),
+			description    = COALESCE(?, description),
+			source_url     = COALESCE(?, source_url),
+			source_provider = COALESCE(?, source_provider),
+			branch_name    = COALESCE(?, branch_name),
+			worktree_path  = COALESCE(?, worktree_path),
+			status         = COALESCE(?, status),
+			plan           = COALESCE(?, plan),
+			acp_session_id = COALESCE(?, acp_session_id),
+			pr_url         = COALESCE(?, pr_url),
+			head_sha       = COALESCE(?, head_sha),
+			error          = COALESCE(?, error),
+			archived_at    = COALESCE(?, archived_at),
+			updated_at     = ?
 		WHERE id = ?`,
 		[
 			updates.title ?? null,
 			updates.description ?? null,
 			updates.sourceUrl ?? null,
 			updates.sourceProvider ?? null,
-			updates.workspacePath ?? null,
-			updates.repoPath ?? null,
-			updates.owner ?? null,
-			updates.repo ?? null,
 			updates.branchName ?? null,
 			updates.worktreePath ?? null,
 			updates.status ?? null,
@@ -190,9 +223,9 @@ export async function listActiveAgentTasks(
 ): Promise<AgentTask[]> {
 	const db = await getDb();
 	const rows = await db.select<AgentTaskRow[]>(
-		`SELECT * FROM agent_tasks
-		 WHERE workspace_path = ? AND owner = ? AND repo = ? AND archived_at IS NULL
-		 ORDER BY created_at DESC`,
+		`${TASK_JOIN}
+		 WHERE p.workspace_path = ? AND p.owner = ? AND p.repo = ? AND t.archived_at IS NULL
+		 ORDER BY t.created_at DESC`,
 		[workspacePath, owner, repo]
 	);
 	return rows.map(rowToTask);
@@ -205,9 +238,9 @@ export async function listArchivedAgentTasks(
 ): Promise<AgentTask[]> {
 	const db = await getDb();
 	const rows = await db.select<AgentTaskRow[]>(
-		`SELECT * FROM agent_tasks
-		 WHERE workspace_path = ? AND owner = ? AND repo = ? AND archived_at IS NOT NULL
-		 ORDER BY archived_at DESC`,
+		`${TASK_JOIN}
+		 WHERE p.workspace_path = ? AND p.owner = ? AND p.repo = ? AND t.archived_at IS NOT NULL
+		 ORDER BY t.archived_at DESC`,
 		[workspacePath, owner, repo]
 	);
 	return rows.map(rowToTask);
