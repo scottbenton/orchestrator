@@ -209,6 +209,27 @@ export function parseDiffStat(output: string): DiffStat {
 }
 
 /**
+ * Detect the default remote branch (e.g. "main" or "master").
+ * Uses `git symbolic-ref refs/remotes/origin/HEAD --short` and strips the
+ * "origin/" prefix. Falls back to "main" if the ref is unset or the command
+ * fails (shallow clone, no remote fetch yet, etc.).
+ */
+export async function detectDefaultBranch(repoPath: string): Promise<string> {
+	const cmd = Command.create(
+		"git",
+		["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
+		{ cwd: repoPath }
+	);
+	const output = await cmd.execute();
+	if (output.code === 0) {
+		const ref = output.stdout.trim();
+		const slash = ref.lastIndexOf("/");
+		return slash >= 0 ? ref.slice(slash + 1) : ref || "main";
+	}
+	return "main";
+}
+
+/**
  * Get commit messages since branching from baseBranch
  * Non-streaming operation
  */
