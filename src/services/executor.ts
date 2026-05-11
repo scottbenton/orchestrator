@@ -84,6 +84,14 @@ export async function executeTask(taskId: string, onLine?: LogCallback): Promise
 	await updateAgentTask(taskId, { status: "pushing" });
 }
 
+// Runs the full task pipeline: agent execution followed by branch push and PR creation.
+// Callers should use this rather than calling executeTask and openPullRequest separately.
+export async function runTaskPipeline(taskId: string, onLine?: LogCallback): Promise<void> {
+	const { openPullRequest } = await import("@/services/pr-service");
+	await executeTask(taskId, onLine);
+	await openPullRequest(taskId, onLine);
+}
+
 export async function retryTask(taskId: string, onLine?: LogCallback): Promise<void> {
 	const task = await getAgentTask(taskId);
 	if (!task) throw new Error(`Task ${taskId} not found`);

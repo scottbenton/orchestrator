@@ -173,6 +173,9 @@ export async function getResolvedConfig(
 		ai_backend: workspace.ai_backend,
 		editor: workspace.editor,
 		plan_review: workspace.plan_review ?? true,
+		pr_labels: [],
+		pr_draft: false,
+		transitions: {},
 	};
 
 	if (owner && repo) {
@@ -183,6 +186,15 @@ export async function getResolvedConfig(
 			}
 			if (repoSettings.editor !== undefined) {
 				resolved.editor = repoSettings.editor;
+			}
+			if (repoSettings.pr_labels !== undefined) {
+				resolved.pr_labels = repoSettings.pr_labels;
+			}
+			if (repoSettings.pr_draft !== undefined) {
+				resolved.pr_draft = repoSettings.pr_draft;
+			}
+			if (repoSettings.transitions !== undefined) {
+				resolved.transitions = repoSettings.transitions;
 			}
 		}
 	}

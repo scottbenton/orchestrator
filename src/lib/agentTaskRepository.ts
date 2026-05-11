@@ -14,6 +14,7 @@ interface AgentTaskRow {
 	description: string;
 	source_url: string | null;
 	source_provider: string | null;
+	source_item_id: string | null;
 	branch_name: string;
 	worktree_path: string | null;
 	status: string;
@@ -36,7 +37,7 @@ interface AgentTaskRow {
 const TASK_JOIN = `
 	SELECT
 		t.id, t.project_id, t.task_type, t.parent_task_id,
-		t.title, t.description, t.source_url, t.source_provider,
+		t.title, t.description, t.source_url, t.source_provider, t.source_item_id,
 		t.branch_name, t.worktree_path, t.status, t.plan,
 		t.acp_session_id, t.pr_url, t.head_sha, t.error,
 		t.archived_at, t.created_at, t.updated_at,
@@ -55,6 +56,7 @@ function rowToTask(row: AgentTaskRow): AgentTask {
 		description: row.description,
 		sourceUrl: row.source_url ?? undefined,
 		sourceProvider: row.source_provider ?? undefined,
+		sourceItemId: row.source_item_id ?? undefined,
 		workspacePath: row.workspace_path,
 		repoPath: row.repo_path,
 		owner: row.owner,
@@ -87,6 +89,7 @@ export interface CreateAgentTaskInput {
 	description: string;
 	sourceUrl?: string;
 	sourceProvider?: string;
+	sourceItemId?: string;
 	branchName: string;
 	worktreePath?: string;
 	status: TaskStatus;
@@ -105,14 +108,14 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 	await db.execute(
 		`INSERT INTO agent_tasks (
 			id, project_id, task_type, parent_task_id, title, description,
-			source_url, source_provider, branch_name, worktree_path, status,
+			source_url, source_provider, source_item_id, branch_name, worktree_path, status,
 			plan, acp_session_id, pr_url, head_sha, error, archived_at,
 			created_at, updated_at
 		) VALUES (
 			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?,
-			?, ?
+			?, ?, ?
 		)`,
 		[
 			input.id,
@@ -123,6 +126,7 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<void
 			input.description,
 			input.sourceUrl ?? null,
 			input.sourceProvider ?? null,
+			input.sourceItemId ?? null,
 			input.branchName,
 			input.worktreePath ?? null,
 			input.status,
@@ -185,6 +189,7 @@ export async function updateAgentTask(
 			description    = COALESCE(?, description),
 			source_url     = COALESCE(?, source_url),
 			source_provider = COALESCE(?, source_provider),
+			source_item_id = COALESCE(?, source_item_id),
 			branch_name    = COALESCE(?, branch_name),
 			worktree_path  = COALESCE(?, worktree_path),
 			status         = COALESCE(?, status),
@@ -201,6 +206,7 @@ export async function updateAgentTask(
 			updates.description ?? null,
 			updates.sourceUrl ?? null,
 			updates.sourceProvider ?? null,
+			updates.sourceItemId ?? null,
 			updates.branchName ?? null,
 			updates.worktreePath ?? null,
 			updates.status ?? null,

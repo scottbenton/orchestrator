@@ -170,6 +170,11 @@ const MIGRATIONS: Array<(db: Database) => Promise<void>> = [
 		await db.execute("CREATE INDEX idx_agent_tasks_project ON agent_tasks(project_id)");
 		await db.execute("CREATE INDEX idx_agent_tasks_status ON agent_tasks(status)");
 	},
+
+	// v4 — add source_item_id to agent_tasks for ticket source transitions (issue #12)
+	async (db) => {
+		await db.execute("ALTER TABLE agent_tasks ADD COLUMN source_item_id TEXT");
+	},
 ];
 
 async function migrate(db: Database): Promise<void> {

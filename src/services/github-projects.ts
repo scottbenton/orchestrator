@@ -173,8 +173,8 @@ function mapIssueNode(node: Record<string, unknown>): Task | null {
 // ---------------------------------------------------------------------------
 
 export class GitHubProjectsSource implements TicketSource {
-	private _owner: string | null = null;
-	private _projectNumber: number | null = null;
+	private readonly _owner: string;
+	private readonly _projectNumber: number;
 	private _statusCache: {
 		projectId: string;
 		fieldId: string;
@@ -182,19 +182,20 @@ export class GitHubProjectsSource implements TicketSource {
 	} | null = null;
 	private readonly _getToken: () => Promise<string | null>;
 
-	constructor(getToken: () => Promise<string | null> = defaultGetToken) {
+	constructor(
+		owner: string,
+		projectNumber: number,
+		getToken: () => Promise<string | null> = defaultGetToken,
+	) {
+		this._owner = owner;
+		this._projectNumber = projectNumber;
 		this._getToken = getToken;
 	}
 
 	async fetchTasks(repoSettings: RepoSettings): Promise<Task[]> {
-		if (!repoSettings.github_project_number) return [];
-
 		const token = await this._getToken();
 		if (!token) return [];
 
-		const [owner] = repoSettings.repo.split("/");
-		this._owner = owner;
-		this._projectNumber = repoSettings.github_project_number;
 		this._statusCache = null;
 
 		const tasks: Task[] = [];
@@ -202,12 +203,12 @@ export class GitHubProjectsSource implements TicketSource {
 
 		do {
 			const data = await graphqlRequest(token, PROJECT_ITEMS_QUERY, {
-				owner,
-				projectNumber: repoSettings.github_project_number,
+				owner: this._owner,
+				projectNumber: this._projectNumber,
 				cursor,
 			});
 
-			const project = extractProject(data, owner, repoSettings.github_project_number);
+			const project = extractProject(data, this._owner, this._projectNumber);
 			const items = project.items as Record<string, unknown>;
 			const pageInfo = items.pageInfo as { hasNextPage: boolean; endCursor: string };
 			const nodes = (items.nodes as Array<Record<string, unknown>>) ?? [];
@@ -228,11 +229,7 @@ export class GitHubProjectsSource implements TicketSource {
 		return tasks;
 	}
 
-	async transitionTask(taskId: string, status: string): Promise<void> {
-		if (!this._owner || !this._projectNumber) {
-			throw new Error("fetchTasks must be called before transitionTask");
-		}
-
+	async transitionTask(itemId: string, status: string): Promise<void> {
 		const token = await this._getToken();
 		if (!token) throw new GitHubAuthError("No GitHub token configured");
 
@@ -270,7 +267,7 @@ export class GitHubProjectsSource implements TicketSource {
 
 		await graphqlRequest(token, TRANSITION_MUTATION, {
 			projectId: this._statusCache.projectId,
-			itemId: taskId,
+			itemId,
 			fieldId: this._statusCache.fieldId,
 			optionId,
 		});
