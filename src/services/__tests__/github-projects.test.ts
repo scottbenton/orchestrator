@@ -157,15 +157,8 @@ function mockFetchStatus(status: number) {
 // fetchTasks tests
 // ---------------------------------------------------------------------------
 
-test("fetchTasks returns [] when github_project_number not configured", async () => {
-	setToken("ghp_token");
-	const source = new GitHubProjectsSource(getToken);
-	const tasks = await source.fetchTasks({ repo: "testowner/testrepo" });
-	expect(tasks).toEqual([]);
-});
-
 test("fetchTasks returns [] when no token stored", async () => {
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 	expect(tasks).toEqual([]);
 });
@@ -185,7 +178,7 @@ test("fetchTasks maps a single page of Issue nodes to Task[] correctly including
 		]),
 	]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks).toHaveLength(1);
@@ -204,7 +197,7 @@ test("fetchTasks: issue with no milestone has no grouping field", async () => {
 	setToken("ghp_token");
 	mockFetch([makePageResponse([makeIssueNode({ id: "item_001" })])]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks).toHaveLength(1);
@@ -222,7 +215,7 @@ test("fetchTasks paginates correctly (two pages, both fetched and combined)", as
 		makePageResponse([makeIssueNode({ id: "item_002", number: 2, title: "Issue 2" })]),
 	]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks).toHaveLength(2);
@@ -240,7 +233,7 @@ test("fetchTasks filters out non-Issue content nodes", async () => {
 		]),
 	]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks).toHaveLength(1);
@@ -256,7 +249,7 @@ test("fetchTasks filters out closed issues", async () => {
 		]),
 	]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks).toHaveLength(1);
@@ -267,7 +260,7 @@ test("fetchTasks maps null body to empty string", async () => {
 	setToken("ghp_token");
 	mockFetch([makePageResponse([makeIssueNode({ body: null })])]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks(BASE_REPO_SETTINGS);
 
 	expect(tasks[0].description).toBe("");
@@ -283,7 +276,7 @@ test("fetchTasks applies label filtering when repoSettings.labels is set", async
 		]),
 	]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	const tasks = await source.fetchTasks({ ...BASE_REPO_SETTINGS, labels: ["bug"] });
 
 	expect(tasks).toHaveLength(2);
@@ -294,7 +287,7 @@ test("fetchTasks throws GitHubAuthError on 401", async () => {
 	setToken("ghp_expired");
 	mockFetchStatus(401);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	await expect(source.fetchTasks(BASE_REPO_SETTINGS)).rejects.toBeInstanceOf(GitHubAuthError);
 });
 
@@ -302,7 +295,7 @@ test("fetchTasks throws readable error on GraphQL project-not-found", async () =
 	setToken("ghp_token");
 	mockFetch([{ data: { repositoryOwner: null } }]);
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	await expect(source.fetchTasks(BASE_REPO_SETTINGS)).rejects.toThrow(
 		/project.*not found/i,
 	);
@@ -314,7 +307,7 @@ test("fetchTasks wraps network errors as GitHubNetworkError", async () => {
 		Promise.reject(new Error("Network failure")),
 	) as unknown as typeof fetch;
 
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	await expect(source.fetchTasks(BASE_REPO_SETTINGS)).rejects.toBeInstanceOf(
 		GitHubNetworkError,
 	);
@@ -327,7 +320,7 @@ test("fetchTasks wraps network errors as GitHubNetworkError", async () => {
 async function setupSourceWithTasks(): Promise<InstanceType<typeof GitHubProjectsSource>> {
 	setToken("ghp_token");
 	mockFetch([makePageResponse([makeIssueNode()])]);
-	const source = new GitHubProjectsSource(getToken);
+	const source = new GitHubProjectsSource("testowner", 42, getToken);
 	await source.fetchTasks(BASE_REPO_SETTINGS);
 	return source;
 }

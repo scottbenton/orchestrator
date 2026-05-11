@@ -20,6 +20,7 @@ export interface AgentTask {
 	description: string;
 	sourceUrl?: string;
 	sourceProvider?: string;
+	sourceItemId?: string;
 	// Denormalized from projects JOIN — read-only on the task
 	workspacePath: string;
 	repoPath: string;

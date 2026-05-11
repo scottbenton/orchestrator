@@ -37,6 +37,9 @@ export const RepoSettingsSchema = z.object({
 	github_project_number: z.number().int().positive().optional(),
 	labels: z.array(z.string()).optional(),
 	auto_grab: z.boolean().optional(),
+	pr_labels: z.array(z.string()).optional(),
+	pr_draft: z.boolean().optional(),
+	transitions: z.object({ on_pr_open: z.string().optional() }).optional(),
 });
 
 export type RepoSettings = z.infer<typeof RepoSettingsSchema>;
@@ -50,6 +53,9 @@ export type ResolvedConfig = {
 	ai_backend: AIBackend;
 	editor?: Editor;
 	plan_review: boolean;
+	pr_labels: string[];
+	pr_draft: boolean;
+	transitions: { on_pr_open?: string };
 };
 
 // ---------------------------------------------------------------------------
