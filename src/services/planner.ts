@@ -4,6 +4,7 @@ import { createAgentTask, getAgentTask, updateAgentTask } from "@/lib/agentTaskR
 import { findOrCreateProject } from "@/lib/projectRepository";
 import { acpCreateSession } from "@/services/acpService";
 import { getResolvedConfig } from "@/services/configService";
+import { executeTask } from "@/services/executor";
 import { agentBranchName, createWorktree, worktreePath as buildWorktreePath } from "@/services/git";
 import { emitSystemLog } from "@/services/logStreamService";
 import { buildSystemPrompt, detectLanguage } from "@/services/workspace";
@@ -202,9 +203,7 @@ export async function approvePlan(taskId: string): Promise<void> {
 	const task = await getAgentTask(taskId);
 	if (!task) throw new Error(`Task ${taskId} not found`);
 
-	await updateAgentTask(taskId, { status: "executing" });
-
-	// TODO: issue #11 — trigger execution here using task.acpSessionId
+	await executeTask(taskId);
 }
 
 // ---------------------------------------------------------------------------
